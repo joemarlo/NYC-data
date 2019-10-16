@@ -188,12 +188,7 @@ station.line.pairs$New.name <- sapply(station.line.pairs$New.name, unlist) #is t
 turnstile.clean.df <- left_join(x = turnstile.df, y = station.line.pairs, by = c("Station", "Linename"))
 turnstile.clean.df <- turnstile.clean.df %>% rename(Old.station.name = Station, Station = New.name)
 turnstile.clean.df <- left_join(x = turnstile.clean.df, y = stations.latlong.df[, c("Station", "Lat", "Long")], by = "Station")
-
-# download nyc map shapes and clean them up
-nyc.geojson <- httr::GET('https://data.cityofnewyork.us/api/geospatial/tqmj-j8zm?method=export&format=GeoJSON')
-nyc.neighborhoods <- rgdal::readOGR(httr::content(nyc.geojson,'text'), 'OGRGeoJSON', verbose = FALSE)
-summary(nyc.neighborhoods)
-nyc.df <- broom::tidy(nyc.neighborhoods)
+rm(station.line.pairs)
 
 # map of the cumulative monthly ridership for each subway station
 turnstile.clean.df %>%

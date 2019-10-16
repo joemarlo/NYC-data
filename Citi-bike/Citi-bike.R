@@ -7,8 +7,6 @@ options(scipen = 999)
 
 project.path <- getwd()
 
-
-
 # data import and cleanup -------------------------------------------------------------
 
 read_combine <- function(thisPath) {
@@ -43,24 +41,6 @@ dim(bike.trips.df)
 names(bike.trips.df) <- str_replace_all(names(bike.trips.df), " ", ".")
 bike.trips.df$gender <- factor(bike.trips.df$gender, levels = c(0, 1, 2),
                                  labels = c("Unknown", "Male", "Female"))
-
-# download nyc map shapes and clean them up
-nyc.geojson <- httr::GET('https://data.cityofnewyork.us/api/geospatial/tqmj-j8zm?method=export&format=GeoJSON')
-nyc.neighborhoods <- rgdal::readOGR(httr::content(nyc.geojson,'text'), 'OGRGeoJSON', verbose = FALSE)
-summary(nyc.neighborhoods)
-nyc.df <- broom::tidy(nyc.neighborhoods)
-
-# id == 0 is the bronx
-# id == 1 is staten island
-# id == 2 is brooklyn
-# id == 3 is queens
-# id == 4 is manhattan
-
-# check to see the shapefile works
-ggplot() +
-  geom_polygon(data = nyc.df, aes(x = long, y = lat, group = group), fill = "gray") +
-  coord_quickmap(xlim = c(-74.05, -73.9),
-                 ylim = c(40.65, 40.84))
 
 # build df that has individual observations for start and end
 # original data has start and end on the same row

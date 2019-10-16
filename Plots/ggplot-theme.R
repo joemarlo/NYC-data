@@ -1,4 +1,7 @@
 require(tidyverse)
+require(httr)
+require(rgdal)
+require(broom)
 
 #theme for ggplot
 seashell.theme <- theme(panel.grid.minor = element_line(color = NA),
@@ -38,6 +41,24 @@ light.theme <- theme(panel.grid.minor.y = element_line(color = NA),
                      plot.subtitle = element_text(size = 10,
                                                   color = "gray30"),
                      text = element_text(family = "Helvetica"))
+
+# download nyc map shapes and clean them up
+nyc.geojson <- GET('https://data.cityofnewyork.us/api/geospatial/tqmj-j8zm?method=export&format=GeoJSON')
+nyc.neighborhoods <- readOGR(httr::content(nyc.geojson,'text'), 'OGRGeoJSON', verbose = FALSE)
+# summary(nyc.neighborhoods)
+nyc.df <- tidy(nyc.neighborhoods)
+rm(nyc.geojson, nyc.neighborhoods)
+# id == 0 is the bronx
+# id == 1 is staten island
+# id == 2 is brooklyn
+# id == 3 is queens
+# id == 4 is manhattan
+# check to see the shapefile works
+# ggplot() +
+#   geom_polygon(data = nyc.df, aes(x = long, y = lat, group = group), fill = "gray") +
+#   coord_quickmap(xlim = c(-74.05, -73.9),
+#                  ylim = c(40.65, 40.84))
+
 
 # website color is #2b7551
 
