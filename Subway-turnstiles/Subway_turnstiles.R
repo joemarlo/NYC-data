@@ -38,11 +38,11 @@ turnstile.df <- turnstile.df %>% filter(Desc == "REGULAR" | Desc == "RECOVR AUD"
 turnstile.df$diff <- ave(turnstile.df$Entries, turnstile.df$Booth, turnstile.df$SCP, FUN = function(x) c(0, diff(x)))
 
 # here's a simpler example
-attach(warpbreaks)
-warpbreaks$diff <- ave(breaks, tension, FUN = function(x) c(0, diff(x)))
-warpbreaks
-detach(warpbreaks)
-rm(warpbreaks)
+# attach(warpbreaks)
+# warpbreaks$diff <- ave(breaks, tension, FUN = function(x) c(0, diff(x)))
+# warpbreaks
+# detach(warpbreaks)
+# rm(warpbreaks)
 
 # summary stats
 summary(turnstile.df$diff) %>% as.vector() %>% scales::comma()
@@ -203,10 +203,11 @@ turnstile.clean.df %>%
   geom_polygon(data = nyc.df,
                aes(x = long, y = lat, group = group),
                fill = "gray80") +
-  geom_point(aes(x = Long, y = Lat, color = Monthly.ridership, size = Monthly.ridership), alpha = 0.5) +
+  geom_point(aes(x = Long, y = Lat, color = Monthly.ridership, size = Monthly.ridership), alpha = 0.4) +
   coord_quickmap(xlim = c(-74.05, -73.9),
                  ylim = c(40.65, 40.82)) +
-  scale_color_continuous(guide = "none") +
+  scale_color_continuous(guide = "none",
+                         low = "#4aa87a", high = "#20593d") +
   scale_size_continuous(name = "Monthly ridership",
                         labels = scales::comma) +
   labs(title = "Monthly ridership for each subway station",
