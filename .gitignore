@@ -3,6 +3,6 @@
 .RData
 .Ruserdata
 
-Citi-bike/Data/
+Citi-bike/Data/*.csv
 Subway-turnstiles/Data/*.txt
-Taxi/Data/
+Taxi/Data/*.csv
