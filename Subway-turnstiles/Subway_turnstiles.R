@@ -218,6 +218,30 @@ turnstile.clean.df %>%
 #        width = 8,
 #        height = 6)
 
+# recreate thte first plot to see if it still makes sense:  station ridership by day of the week
+turnstile.clean.df %>%
+  group_by(wday(Date), Station, Linename, Lat, Long) %>%
+  summarize(Daily = sum(diff)) %>%
+  rename(WeekDay = `wday(Date)`) %>%
+  mutate(Color.group = case_when(Station == "grand central - 42nd st" ~ "ColGroup1",
+                                 Station == "herald sq - 34th st" ~ "#ColGroup2",
+                                 TRUE ~ "ColGroup3")) %>%
+  ggplot(aes(x = WeekDay, y = Daily, group = Station, color = Color.group)) +
+  geom_line(alpha = 0.4) +
+  scale_colour_manual(values = c("forestgreen", "#2b7551", "gray80")) +
+  theme(legend.position = "none") +
+  scale_x_continuous(breaks = 1:7,
+                     labels = c("Monday", "Tuesday", "Wedneday", "Thursday", "Friday", "Saturday", "Sunday"),
+                     name = NULL) +
+  scale_y_continuous(labels = scales::comma,
+                     name = "Daily station ridership") +
+  labs(title = "Daily subway ridership by station",
+       subtitle = "September 2019") +
+  annotate("text", x = 6.7, y = 155000, label = 'bold("GCT")', parse =TRUE, color = "#2b7551") +
+  annotate("text", x = 6.7, y = 140000, label = 'bold("34th St")', parse =TRUE, color = "forestgreen") +
+  light.theme
+
+
 # scratch code ------------------------------------------------------------
 
 #calculate entries by grouping by time
