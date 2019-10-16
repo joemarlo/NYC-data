@@ -106,7 +106,7 @@ tidybike.df[samp_rows,] %>%
   guides(color = guide_legend(override.aes = list(alpha = 1))) + #overrides the alpha in the legend only
   coord_quickmap(xlim = c(-74.05, -73.9),
                  ylim = c(40.65, 40.82)) +
-  labs(title = "Citi Bike trip start and end locations during commuting hours",
+  labs(title = "Start and end locations of Citi Bike trips during commuting hours",
        subtitle = paste0("A sample of ",
                          scales::comma(length(samp_rows)),
                          " weekday trips in 2019")) +
@@ -117,12 +117,12 @@ tidybike.df[samp_rows,] %>%
         panel.spacing.x = unit(2, "lines")) +
   facet_grid(~ Time.of.Day)
 
-ggsave(filename = "Plots/Commuting_light.png",
-       plot = last_plot(),
-       device = "png",
-       path = project.path,
-       width = 8,
-       height = 6)
+# ggsave(filename = "Plots/Commuting_light.png",
+#        plot = last_plot(),
+#        device = "png",
+#        path = project.path,
+#        width = 8,
+#        height = 7)
 
 
 # scratch code ------------------------------------------------------------
