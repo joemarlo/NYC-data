@@ -209,8 +209,8 @@ ggsave(filename = "Plots/Subway_map.svg",
        plot = last_plot(),
        device = "svg",
        path = project.path,
-       width = 7,
-       height = 5)
+       width = 8,
+       height = 6)
 
 # scratch code ------------------------------------------------------------
 
