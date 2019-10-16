@@ -7,5 +7,5 @@
 </br>
 
 <p align="center">
-<img src="Plots/Commuting.png" width="700">
+<img src="Plots/Commuting_light.png" width="700">
 </p>

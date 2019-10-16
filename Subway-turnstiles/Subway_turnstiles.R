@@ -1,19 +1,92 @@
 library(tidyverse)
 library(httr)
 library(hms)
+library(lubridate)
 library(DescTools)
 library(stringdist)
 library(parallel)
 
 cpu.cores <- detectCores()
-#there are some major data cleaning issues
+# there are some major data cleaning issues
 
-turnstile_190928 <- read_csv("/home/joemarlo/Dropbox/Data/Projects/Subway-turnstiles/turnstile_190928.txt",
-                             col_types = cols(DATE = col_date(format = "%m/%d/%Y"), 
-                                              ENTRIES = col_double(),
-                                              EXITS = col_double(), 
-                                              TIME = col_time(format = "%H:%M:%S")))
-#double check if conversion of ENTRIES and EXITS to double is correct
+turnt <- read_csv("Subway-turnstiles/Data/turnstile_190928.txt",
+                  col_types = cols(
+                    DATE = col_date(format = "%m/%d/%Y"),
+                    ENTRIES = col_double(),
+                    EXITS = col_double(),
+                    TIME = col_time(format = "%H:%M:%S")
+                    )
+                  )
+
+# data clean up-------------------------------------------------------------------------
+
+# change names to proper case
+names(turnt) <- sapply(names(turnt), function(name) paste0(toupper(substr(name, 1, 1)), tolower(substring(name, 2))))
+names(turnt)[1] <- "Booth"
+names(turnt)[3] <- "SCP"
+
+#only include "regular" and "recover audit" measurements. Others include maintenance checks
+turnt <- turnt %>% filter(Desc == "REGULAR" | Desc == "RECOVR AUD")
+
+# calculate the difference in Entries within each grouping of Booth and  SCP (SCP is a group of turnstiles within a station)
+# the goal here is the calculate the average difference in Entries for a given turnstile
+# this assumes turnstiles are in the same order each time the data is updated by the MTA
+turnt$diff <- ave(turnt$Entries, turnt$Booth, turnt$SCP, FUN = function(x) c(0, diff(x)))
+
+# here's a simpler example
+attach(warpbreaks)
+warpbreaks$diff <- ave(breaks, tension, FUN = function(x) c(0, diff(x)))
+warpbreaks
+detach(warpbreaks)
+
+# summary stats
+summary(turnt$diff) %>% as.vector() %>% scales::comma()
+
+# table of counts for given extreme breaks
+breaks <- c(-Inf, 0, 1000, 10000, 100000, Inf)
+hist(turnt$diff, breaks = breaks, plot = FALSE)$counts
+
+# remove any negative counts
+turnt <- turnt[turnt$diff > 0,]
+
+# remove anything over 100,000
+# note: average daily ridership for the who system is 5.5mm
+turnt <- turnt[turnt$diff <= 100000,]
+
+# check again for outliers
+hist(turnt$diff, breaks = breaks, plot = FALSE)$counts
+rm(breaks)
+
+
+# EDA ---------------------------------------------------------------------
+
+# top stations by day
+turnt %>%
+  group_by(Station, Date) %>%
+  summarize(Daily = sum(diff)) %>%
+  arrange(desc(Daily))
+
+# station ridership by day of the week
+turnt %>%
+  group_by(wday(Date), Station) %>%
+  summarize(Daily = sum(diff)) %>%
+  rename(WeekDay = `wday(Date)`) %>%
+  ggplot(aes(x = WeekDay, y = Daily, group = Station, color = Station)) +
+  geom_line() +
+  theme(legend.position = "none") +
+  scale_x_continuous(breaks = 1:7,
+                     labels = c("Monday", "Tuesday", "Wedneday", "Thursday", "Friday", "Saturday", "Sunday")) +
+  scale_y_continuous(labels = scales::comma,
+                     name = "Daily station ridership") +
+  labs(title = "Daily subway ridership by station",
+       subtitle = "September 2019") +
+  light.theme
+
+# add lat long ------------------------------------------------------------
+
+# core problem is that the turnstile data doesn't have lat long
+# goal is to merge with a dataset known list of stations with lat long
+# but dataset station names don't match so we need to fuzzy match
 
 #import list of stations and tidy | need this for lat long
 stations_df <- GET("https://data.cityofnewyork.us/api/views/kk4q-3rt2/rows.csv?accessType=DOWNLOAD")
@@ -65,6 +138,9 @@ turnstile_190928 %>%
          TIME == as_hms("20:00:00"))
 
 
+
+# scratch code ------------------------------------------------------------
+
 #calculate entries by grouping by time
 # entries_exits <- turnstile_190928 %>%
 #   group_by(STATION, DATE, TIME) %>%
@@ -90,9 +166,23 @@ entries_exits <- turnstile_190928 %>%
          unique_ID = paste(STATION, turnstile_ID, sep = "-")) %>%
   ungroup()
 
-#core problem after this line is outliers register values;
-#    have tried winsorize with different intervals, replacing values outside IQR range w/NAs
-#    pretty much everything after this line doesn't work
+
+# potential winsoring methodologies below
+entries_exits2 <- invisible(mclapply(
+  X = unique(entries_exits$unique_ID),
+  mc.cores = cpu.cores,
+  FUN = function(ID) {
+    x <- entries_exits[entries_exits$unique_ID == ID, ]$ENTRIES
+    
+    #remove outliers outside +- IQR
+    medx <- median(x)
+    IQRx <- IQR(x)
+    constant <- 10000
+    x[x < (medx - constant)] <- NA
+    x[x > (medx + constant)] <- NA
+    
+    return(x)
+  })) %>% unlist()
 
 
 # apply winsorizing at the turnstile level; this doesn't work well
@@ -111,57 +201,8 @@ entries_exits <- turnstile_190928 %>%
 #   }
 # ))
 
-entries_exits2 <- invisible(mclapply(
-  X = unique(entries_exits$unique_ID),
-  mc.cores = cpu.cores,
-  FUN = function(ID) {
-    x <- entries_exits[entries_exits$unique_ID == ID, ]$ENTRIES
-                     
-    #remove outliers outside +- IQR
-    medx <- median(x)
-    IQRx <- IQR(x)
-    constant <- 10000
-    x[x < (medx - constant)] <- NA
-    x[x > (medx + constant)] <- NA
-                     
-    return(x)
-})) %>% unlist()
 
-entries_exits$ENTRIES2 <- entries_exits2
-
-tmp <- entries_exits %>%
-  arrange(STATION, desc(DATE), turnstile_ID) %>%
-  group_by(STATION, DATE, turnstile_ID) %>%
-  mutate(Total_entries = if_else(ENTRIES2 > lead(ENTRIES),
-                                 ENTRIES2 - lead(ENTRIES),
-                                 0)) %>%
-  ungroup()
-
-tmp %>%
-  filter(unique_ID == "42ND ST - PORT AUTHORITY BUS TERM-27") %>% View()
-  arrange(desc(turnstile_ID)) %>%
-  View()
-
-  x <- entries_exits[entries_exits$unique_ID == "42ND ST - PORT AUTHORITY BUS TERM-27", ]$ENTRIES
-  
-  #remove outliers outside +- IQR
-  medx <- median(x)
-  IQRx <- IQR(x)
-  constant <- 10000
-  x[x < (medx - constant)] <- NA
-  x[x > (medx + constant)] <- NA
-  x
-  
-  entries_exits[entries_exits$unique_ID == ID, ]$ENTRIES <<- x
-  
-tmp %>%
-  group_by(STATION, DATE) %>%
-  summarize(Total_entries = sum(Total_entries, na.rm = TRUE))  %>%
-  arrange(desc(Total_entries)) %>%
-  View()
-
-
-#or remove entries that are above a certain threshold
+# or remove entries that are above a certain threshold
 invisible(
   lapply(unique(entries_exits$STATION),
          function(station) {
@@ -175,24 +216,23 @@ invisible(
   )
 )
 
-#apply winsorizing at the station level
-# invisible(
-#   lapply(unique(entries_exits$STATION),
-#          function(station) {
-#            entries_exits[entries_exits$STATION == station,]$Total_entries <<-
-#              entries_exits[entries_exits$STATION == station,]$Total_entries %>%
-#              Winsorize(.,
-#                        minval = 0,
-#                        # maxval = 100000,
-#                        probs = c(0, 0.9),
-#                        na.rm = TRUE)
-#          }
-#   )
-# )
+# apply winsorizing at the station level
+invisible(
+  lapply(unique(entries_exits$STATION),
+         function(station) {
+           entries_exits[entries_exits$STATION == station,]$Total_entries <<-
+             entries_exits[entries_exits$STATION == station,]$Total_entries %>%
+             Winsorize(.,
+                       minval = 0,
+                       # maxval = 100000,
+                       probs = c(0, 0.9),
+                       na.rm = TRUE)
+         }
+  )
+)
 
 
 range(entries_exits$Total_entries, na.rm = T)
-
 
 entries_exits %>%
   group_by(STATION, DATE) %>%
@@ -210,6 +250,3 @@ entries_exits %>%
   summarize(Total_entries = sum(Total_entries, na.rm = TRUE)) %>%
   ggplot(aes(x = TIME, y = Total_entries, group = DATE, color = DATE, alpha = 0.2)) +
   geom_line()
-
-
-
