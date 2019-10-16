@@ -4,5 +4,5 @@
 .Ruserdata
 
 Citi-bike/Data/
-Subway-turnstiles/Data/
+Subway-turnstiles/Data/*.txt
 Taxi/Data/
