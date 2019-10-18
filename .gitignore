@@ -6,3 +6,4 @@
 Citi-bike/Data/*.csv
 Subway-turnstiles/Data/*.txt
 Taxi/Data/*.csv
+.DS_Store
