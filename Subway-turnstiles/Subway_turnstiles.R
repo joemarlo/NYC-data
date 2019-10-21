@@ -5,6 +5,8 @@ library(lubridate)
 library(DescTools)
 library(stringdist)
 library(parallel)
+library(gganimate)
+library(gifski)
 source("Plots/ggplot-theme.R")
 
 project.path <- getwd()
@@ -265,8 +267,7 @@ turnstile.clean.df.2 %>%
   scale_size_continuous(name = "Monthly ridership",
                         labels = scales::comma) +
   labs(title = "Monthly ridership for each subway station",
-       subtitle = "September 2019",
-       caption = "Messy data; not reliable") +
+       subtitle = "September 2019") +
   light.theme +
   theme(axis.title = element_blank())
 
@@ -277,28 +278,44 @@ turnstile.clean.df.2 %>%
 #        width = 8,
 #        height = 6)
 
-# recreate thte first plot to see if it still makes sense:  station ridership by day of the week
-turnstile.clean.df %>%
-  group_by(wday(Date), Station, Linename, Lat, Long) %>%
-  summarize(Daily = sum(diff)) %>%
-  rename(WeekDay = `wday(Date)`) %>%
-  mutate(Color.group = case_when(Station == "grand central - 42nd st" ~ "ColGroup1",
-                                 Station == "herald sq - 34th st" ~ "#ColGroup2",
-                                 TRUE ~ "ColGroup3")) %>%
-  ggplot(aes(x = WeekDay, y = Daily, group = Station, color = Color.group)) +
-  geom_line(alpha = 0.4) +
-  scale_colour_manual(values = c("forestgreen", "#2b7551", "gray80")) +
-  theme(legend.position = "none") +
-  scale_x_continuous(breaks = 1:7,
-                     labels = c("Monday", "Tuesday", "Wedneday", "Thursday", "Friday", "Saturday", "Sunday"),
-                     name = NULL) +
-  scale_y_continuous(labels = scales::comma,
-                     name = "Daily station ridership") +
-  labs(title = "Daily subway ridership by station",
-       subtitle = "September 2019") +
-  annotate("text", x = 6.7, y = 155000, label = 'bold("GCT")', parse =TRUE, color = "#2b7551") +
-  annotate("text", x = 6.7, y = 140000, label = 'bold("34th St")', parse =TRUE, color = "forestgreen") +
-  light.theme
+#create animated map of ridership hourly
+subway.plot <- turnstile.clean.df.2 %>%
+  filter(Time %in% as_hms(paste0(seq(2, 20, 2), ":00:00"))) %>% #removes unique times
+  mutate(Time = hour(Time),
+         id = paste0(Station, "-", Lat, "-", Long)) %>%
+  group_by(Station, Lat, Long, id, Time) %>%
+  summarize(Hourly.ridership = sum(diff)) %>%
+  ggplot() +
+  geom_polygon(data = nyc.df,
+               aes(x = long, y = lat, group = group),
+               fill = "gray80") +
+  geom_point(aes(x = Long, y = Lat,
+                 group = id,
+                 color = Hourly.ridership,
+                 size = Hourly.ridership),
+             alpha = 0.4) +
+  coord_quickmap(xlim = c(-74.05, -73.9),
+                 ylim = c(40.65, 40.82)) +
+  scale_color_continuous(guide = "none",
+                         low = "#4aa87a", high = "#20593d") +
+  scale_size_continuous(name = "Hourly ridership",
+                        labels = scales::comma) +
+  transition_reveal(along = Time) +
+  labs(title = "Hourly ridership for each subway station",
+       subtitle = "Time: {frame_along}:00") +
+  light.theme +
+  theme(axis.title = element_blank())
+
+#build the animation
+subway.gif <- animate(subway.plot,
+                      fps = 24,
+                      duration = 12,
+                      end_pause = 24 * 3, #pause for 3 seconds at the end
+                      height = 576,
+                      width = 432)
+
+anim_save(animation = subway.gif,
+          filename = "Plots/subway_hourly.gif")
 
 
 # scratch code ------------------------------------------------------------
@@ -454,3 +471,29 @@ name_match_tbl %>%
 #use the osa method to replace names in the turnstile dataset and add lat/long
 turnstile_190928$STATION <- name_match_tbl$New_osa[match(turnstile_190928$STATION, name_match_tbl$Orig)]
 turnstile_190928 <- left_join(x = turnstile_190928, y = stations_df, by = "STATION")
+
+
+# recreate thte first plot to see if it still makes sense:  station ridership by day of the week
+turnstile.clean.df.2 %>%
+  group_by(Date, Station, Linename, Lat, Long) %>%
+  summarize(Daily = sum(diff)) %>%
+  group_by(wday(Date), Station, Linename, Lat, Long) %>%
+  summarize(Daily = mean(Daily)) %>%
+  rename(WeekDay = `wday(Date)`) %>%
+  mutate(Color.group = case_when(Station == "grand central - 42nd st" ~ "ColGroup1",
+                                 Station == "herald sq - 34th st" ~ "#ColGroup2",
+                                 TRUE ~ "ColGroup3")) %>%
+  ggplot(aes(x = WeekDay, y = Daily, group = Station, color = Color.group)) +
+  geom_line(alpha = 0.4) +
+  scale_colour_manual(values = c("forestgreen", "#2b7551", "gray80")) +
+  theme(legend.position = "none") +
+  scale_x_continuous(breaks = 1:7,
+                     labels = c("Monday", "Tuesday", "Wedneday", "Thursday", "Friday", "Saturday", "Sunday"),
+                     name = NULL) +
+  scale_y_continuous(labels = scales::comma,
+                     name = "Daily station ridership") +
+  labs(title = "Daily subway ridership by station",
+       subtitle = "September 2019") +
+  annotate("text", x = 6.7, y = 155000, label = 'bold("GCT")', parse =TRUE, color = "#2b7551") +
+  annotate("text", x = 6.7, y = 140000, label = 'bold("34th St")', parse =TRUE, color = "forestgreen") +
+  light.theme
