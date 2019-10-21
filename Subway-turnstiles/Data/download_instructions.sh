@@ -1,1 +1,1 @@
-curl -O -L http://web.mta.info/developers/data/nyct/turnstile/turnstile_190928.txt
+xargs -n 1 curl -O -L < urls.txt

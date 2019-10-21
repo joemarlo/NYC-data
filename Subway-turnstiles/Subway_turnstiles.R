@@ -35,8 +35,9 @@ turnstile.df <- turnstile.df %>% filter(Desc == "REGULAR" | Desc == "RECOVR AUD"
 # calculate the difference in Entries within each grouping of Booth and  SCP (SCP is a group of turnstiles within a station)
 # the goal here is the calculate the average difference in Entries for a given turnstile
 # this assumes turnstiles are in the same order each time the data is updated by the MTA
-turnstile.df$diff <- ave(turnstile.df$Entries, turnstile.df$Booth, turnstile.df$SCP, FUN = function(x) c(0, diff(x)))
-
+# turnstile.df$diff <- ave(turnstile.df$Entries, turnstile.df$Booth, turnstile.df$SCP, FUN = function(x) c(0, diff(x)))
+turnstile.df <- turnstile.df %>% group_by(Booth, SCP) %>% mutate(diff = Entries - lag(Entries))
+  
 # here's a simpler example
 # attach(warpbreaks)
 # warpbreaks$diff <- ave(breaks, tension, FUN = function(x) c(0, diff(x)))
@@ -69,6 +70,8 @@ rm(breaks)
 turnstile.df %>%
   group_by(Station, Date) %>%
   summarize(Daily.ridership = sum(diff)) %>%
+  group_by(Station) %>%
+  summarize(Daily.ridership = mean(Daily.ridership)) %>%
   arrange(desc(Daily.ridership))
 
 # station ridership by day of the week
@@ -77,7 +80,7 @@ turnstile.df %>%
   summarize(Daily = sum(diff)) %>%
   rename(WeekDay = `wday(Date)`) %>%
   mutate(Color.group = case_when(Station == "34 ST-PENN STA" ~ "ColGroup1",
-                                 Station == "GRD CNTRL-42 ST" ~ "#ColGroup2",
+                                 Station == "GRD CNTRL-42 ST" ~ "ColGroup2",
                                  TRUE ~ "ColGroup3")) %>%
   ggplot(aes(x = WeekDay, y = Daily, group = Station, color = Color.group)) +
   geom_line(alpha = 0.4) +
@@ -179,6 +182,13 @@ station.line.pairs$New.name <- lapply(1:nrow(station.line.pairs), function(index
 station.line.pairs$New.name[station.line.pairs$Station == "34 st-herald sq"] <- "herald sq - 34th st"
 station.line.pairs$New.name[station.line.pairs$Station == "14 st-union sq"] <- "union sq - 14th st"
 
+#string sim scores of the station name matches
+station.line.pairs %>%
+  rowwise() %>%
+  mutate(Score = stringsim(Station, New.name)) %>%
+  ggplot(aes(x = Score)) +
+  geom_histogram(color = "white", binwidth = 0.05)
+
 # unlist the new name and line
 station.line.pairs$Linename <- sapply(station.line.pairs$Linename, function(x) unlist(x) %>% paste(., collapse = "-"))
 turnstile.df$Linename <- sapply(turnstile.df$Linename, function(x) unlist(x) %>% paste(., collapse = "-"))
@@ -190,9 +200,43 @@ turnstile.clean.df <- turnstile.clean.df %>% rename(Old.station.name = Station, 
 turnstile.clean.df <- left_join(x = turnstile.clean.df, y = stations.latlong.df[, c("Station", "Lat", "Long")], by = "Station")
 rm(station.line.pairs)
 
+
+# using the preprocessed lat long data ------------------------------------
+
+#import list of stations and tidy | need this for lat long
+github.latlong.df <- read_csv("https://raw.githubusercontent.com/chriswhong/nycturnstiles/master/geocoded.csv", 
+                              col_names = FALSE)
+#rename the columns
+names(github.latlong.df) <- c("Unit", "Booth", "Station", "Lines", "Division", "Lat", "Long")
+#join it with the original turnstile data
+turnstile.clean.df.2 <- left_join(turnstile.df, github.latlong.df[, c("Unit", "Booth", "Lat", "Long")], by = c("Booth", "Unit"))
+
+# visuals -----------------------------------------------------------------
+
 # map of the cumulative monthly ridership for each subway station
-turnstile.clean.df %>%
-  group_by(Station, Linename, Lat, Long) %>%
+# turnstile.clean.df %>%
+#   group_by(Station, Linename, Lat, Long) %>%
+#   summarize(Monthly.ridership = sum(diff)) %>%
+#   ggplot() +
+#   geom_polygon(data = nyc.df,
+#                aes(x = long, y = lat, group = group),
+#                fill = "gray80") +
+#   geom_point(aes(x = Long, y = Lat, color = Monthly.ridership, size = Monthly.ridership), alpha = 0.4) +
+#   coord_quickmap(xlim = c(-74.05, -73.9),
+#                  ylim = c(40.65, 40.82)) +
+#   scale_color_continuous(guide = "none",
+#                          low = "#4aa87a", high = "#20593d") +
+#   scale_size_continuous(name = "Monthly ridership",
+#                         labels = scales::comma) +
+#   labs(title = "Monthly ridership for each subway station",
+#        subtitle = "September 2019",
+#        caption = "Messy data; not reliable") +
+#   light.theme +
+#   theme(axis.title = element_blank())
+
+# same map but using the pre-processed data
+turnstile.clean.df.2 %>%
+  group_by(Station, Lat, Long) %>%
   summarize(Monthly.ridership = sum(diff)) %>%
   ggplot() +
   geom_polygon(data = nyc.df,
