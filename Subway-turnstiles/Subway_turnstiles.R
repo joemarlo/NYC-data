@@ -8,18 +8,31 @@ library(parallel)
 source("Plots/ggplot-theme.R")
 
 project.path <- getwd()
-
 cpu.cores <- detectCores()
-# there are some major data cleaning issues
 
-turnstile.df <- read_csv("Subway-turnstiles/Data/turnstile_190928.txt",
-                  col_types = cols(
-                    DATE = col_date(format = "%m/%d/%Y"),
-                    ENTRIES = col_double(),
-                    EXITS = col_double(),
-                    TIME = col_time(format = "%H:%M:%S")
-                    )
-                  )
+
+#function to read in the data, format, and then combine to one dataframe
+read_subway_files<- function(year){
+  filenames <- list.files(path = "Subway-turnstiles/Data/",
+                          pattern = paste0("turnstile_", year, ".....txt"),
+                          all.files = FALSE, full.names = FALSE,
+                          recursive = FALSE, ignore.case = FALSE)
+  map_df(filenames, function(filename){
+    NameDF <- read_csv(file = paste0("Subway-turnstiles/Data/", filename),
+                       col_types = cols(
+                         DATE = col_date(format = "%m/%d/%Y"),
+                         ENTRIES = col_double(),
+                         EXITS = col_double(),
+                         TIME = col_time(format = "%H:%M:%S")
+                       ))
+    NameDF$File <- filename
+    return(NameDF)
+  })
+}
+
+#read in the files
+turnstile.df <- read_subway_files(19) %>% bind_rows()
+rm(read_subway_files)
 
 # data clean up-------------------------------------------------------------------------
 
@@ -76,8 +89,10 @@ turnstile.df %>%
 
 # station ridership by day of the week
 turnstile.df %>%
-  group_by(wday(Date), Station) %>%
+  group_by(Date, Station) %>%
   summarize(Daily = sum(diff)) %>%
+  group_by(wday(Date), Station) %>%
+  summarize(Daily = mean(Daily)) %>%
   rename(WeekDay = `wday(Date)`) %>%
   mutate(Color.group = case_when(Station == "34 ST-PENN STA" ~ "ColGroup1",
                                  Station == "GRD CNTRL-42 ST" ~ "ColGroup2",
