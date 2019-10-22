@@ -102,7 +102,7 @@ turnstile.df %>%
 # station ridership by day of the week
 turnstile.df %>%
   group_by(Date, Station) %>%
-  summarize(Daily = sum(diff)) %>%
+  summarize(Daily = sum(Entries)) %>%
   group_by(wday(Date), Station) %>%
   summarize(Daily = mean(Daily)) %>%
   rename(WeekDay = `wday(Date)`) %>%
@@ -114,7 +114,7 @@ turnstile.df %>%
   scale_colour_manual(values = c("forestgreen", "#2b7551", "gray80")) +
   theme(legend.position = "none") +
   scale_x_continuous(breaks = 1:7,
-                     labels = c("Monday", "Tuesday", "Wedneday", "Thursday", "Friday", "Saturday", "Sunday"),
+                     labels = c("Sunday", "Monday", "Tuesday", "Wedneday", "Thursday", "Friday", "Saturday"),
                      name = NULL) +
   scale_y_continuous(labels = scales::comma,
                      name = "Daily station ridership") +
@@ -196,7 +196,7 @@ turnstile.clean.df.2 %>%
 turnstile.clean.df.2 %>%
   ungroup() %>%
   select(Date, Time, Station, Lat, Long, Entries, Exits) %>%
-  filter(wday(Date) < 6) %>%
+  filter(wday(Date) %in% 2:6) %>%
   mutate(Morning = hour(Time) >= 6 & hour(Time) <= 10,
          Evening = hour(Time) >= 16 & hour(Time) <= 20) %>%
   filter(Morning | Evening) %>%
