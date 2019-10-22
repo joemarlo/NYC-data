@@ -11,8 +11,9 @@
 </p>
 
 <p align="center">
-<img src="Plots/Subway_map.svg" width=80%>
+<img src="Plots/Subway_time_map.svg" width=83%>
 </p>
+
 
 <p align="center">
 <img src="Plots/subway_hourly.gif" width=57%>

@@ -51,7 +51,10 @@ turnstile.df <- turnstile.df %>% filter(Desc == "REGULAR" | Desc == "RECOVR AUD"
 # the goal here is the calculate the average difference in Entries for a given turnstile
 # this assumes turnstiles are in the same order each time the data is updated by the MTA
 # turnstile.df$diff <- ave(turnstile.df$Entries, turnstile.df$Booth, turnstile.df$SCP, FUN = function(x) c(0, diff(x)))
-turnstile.df <- turnstile.df %>% group_by(Booth, SCP) %>% mutate(diff = Entries - lag(Entries))
+turnstile.df <- turnstile.df %>%
+  group_by(Booth, SCP) %>%
+  mutate(Entries = Entries - lag(Entries),
+         Exits = Exits - lag(Exits))
   
 # here's a simpler example
 # attach(warpbreaks)
@@ -61,23 +64,30 @@ turnstile.df <- turnstile.df %>% group_by(Booth, SCP) %>% mutate(diff = Entries 
 # rm(warpbreaks)
 
 # summary stats
-summary(turnstile.df$diff) %>% as.vector() %>% scales::comma()
+summary(turnstile.df$Entries) %>% as.vector() %>% scales::comma()
+summary(turnstile.df$Exits) %>% as.vector() %>% scales::comma()
 
 # table of counts for given extreme breaks
 breaks <- c(-Inf, 0, 1000, 10000, 100000, Inf)
-hist(turnstile.df$diff, breaks = breaks, plot = FALSE)$counts
+hist(turnstile.df$Entries, breaks = breaks, plot = FALSE)$counts
+hist(turnstile.df$Exits, breaks = breaks, plot = FALSE)$counts
 
 # remove any negative counts
-turnstile.df <- turnstile.df[turnstile.df$diff > 0,]
+turnstile.df <- turnstile.df[turnstile.df$Entries > 0,]
+turnstile.df <- turnstile.df[turnstile.df$Exits > 0,]
 
 # remove anything over 100,000
 # note: average daily ridership for the who system is 5.5mm
-turnstile.df <- turnstile.df[turnstile.df$diff <= 100000,]
+turnstile.df <- turnstile.df[turnstile.df$Entries <= 100000,]
+turnstile.df <- turnstile.df[turnstile.df$Exits <= 100000,]
 
 # check again for outliers
-hist(turnstile.df$diff, breaks = breaks, plot = FALSE)$counts
+hist(turnstile.df$Entries, breaks = breaks, plot = FALSE)$counts
+hist(turnstile.df$Exits, breaks = breaks, plot = FALSE)$counts
 rm(breaks)
 
+#net entries and exits
+scales::percent((sum(turnstile.df$Entries, na.rm = TRUE) - sum(turnstile.df$Exits, na.rm = TRUE)) / sum(turnstile.df$Entries, na.rm = TRUE))
 
 # EDA ---------------------------------------------------------------------
 
@@ -122,102 +132,6 @@ turnstile.df %>%
 #        height = 5)
 
 
-# add lat long ------------------------------------------------------------
-
-# core problem is that the turnstile data doesn't have lat long info
-# goal is to merge with a dataset known list of stations with lat long
-# but dataset station names don't match so we need to fuzzy match
-
-#import list of stations and tidy | need this for lat long
-stations.latlong.df <- GET("https://data.cityofnewyork.us/api/views/kk4q-3rt2/rows.csv?accessType=DOWNLOAD")
-stations.latlong.df <- content(stations.latlong.df)
-
-# change names to proper case
-names(stations.latlong.df) <- sapply(names(stations.latlong.df), toproper)
-
-#seperate out the lat/long
-stations.latlong.df <- stations.latlong.df %>%
-  mutate(The_geom = str_remove(The_geom, "POINT [(]") %>% str_remove(., "[)]")) %>%
-  separate(The_geom, into = c("Long", "Lat"), sep = " ") %>%
-  mutate(Lat = as.double(Lat),
-         Long = as.double(Long)) %>%
-  rename(Station = Name) %>%
-  select(Station, Lat, Long, Line)
-
-#check the station names; most station names don't match so need to fuzzy match
-unique(turnstile.df$Station)
-unique(stations.latlong.df$Station)
-
-# need to match on station name and line; check line first then match name?
-# match subway line letters by splitting apart and checking individually
-# need to clean up stations.latlong.df$Line first; remove "express" so E doesn't match it
-stations.latlong.df$Line <- lapply(stations.latlong.df$Line, function(line) str_remove_all(line, "Express"))
-stations.latlong.df$Line <- sapply(stations.latlong.df$Line, function(line) str_split(line, "-"))
-
-# similarly clean up the equavalent column in turnstile.df
-turnstile.df$Linename <- sapply(turnstile.df$Linename, function(line) str_split(line, ""))
-
-# make station names lower case so they match better
-stations.latlong.df$Station <- tolower(stations.latlong.df$Station)
-turnstile.df$Station <- tolower(turnstile.df$Station)
-
-get_new_name <- function(old.name, subway.lines){
-  
-  # function returns a matching station name from the new lat/long dataset
-  # it first creates a possible list of new station names based on which subway
-  #   lines are served
-  # then it fuzzy matches the name of the old.name against the list
-  #   of new station news
-  
-  # count of how many stations are matched in the new data
-  match.counts <- sapply(stations.latlong.df$Line, function(x) sum(subway.lines %in% x))
-  
-  # find the station names that match within two stations or at least one station
-  match.stations <- stations.latlong.df$Station[match.counts >= max(1, max(match.counts) - 2)]
-  
-  # now fuzzy match the station name within this list
-  new.name <- stringsim(old.name, match.stations, method = "osa") %>% which.max(.) %>% match.stations[.]
-  
-  return(new.name)
-}
-
-# get only unique pairs of station and lines
-station.line.pairs <- turnstile.df[,c("Station", "Linename")][!duplicated(turnstile.df[,c("Station", "Linename")]),]
-
-# apply the get_new_name function over the unique pairs data frame
-station.line.pairs$New.name <- lapply(1:nrow(station.line.pairs), function(index) {
-  get_new_name(station.line.pairs$Station[[index]], station.line.pairs$Linename[[index]])
-})
-
-# seems to still be some issues. e.g. below stations
-# 34 st-herald sq
-# 14 st-union sq
-# botanic garden
-# and more
-
-#manually fix a few station
-station.line.pairs$New.name[station.line.pairs$Station == "34 st-herald sq"] <- "herald sq - 34th st"
-station.line.pairs$New.name[station.line.pairs$Station == "14 st-union sq"] <- "union sq - 14th st"
-
-#string sim scores of the station name matches
-station.line.pairs %>%
-  rowwise() %>%
-  mutate(Score = stringsim(Station, New.name)) %>%
-  ggplot(aes(x = Score)) +
-  geom_histogram(color = "white", binwidth = 0.05)
-
-# unlist the new name and line
-station.line.pairs$Linename <- sapply(station.line.pairs$Linename, function(x) unlist(x) %>% paste(., collapse = "-"))
-turnstile.df$Linename <- sapply(turnstile.df$Linename, function(x) unlist(x) %>% paste(., collapse = "-"))
-station.line.pairs$New.name <- sapply(station.line.pairs$New.name, unlist) #is this neccessary still?
-
-# merge with the new data frame to get lat long
-turnstile.clean.df <- left_join(x = turnstile.df, y = station.line.pairs, by = c("Station", "Linename"))
-turnstile.clean.df <- turnstile.clean.df %>% rename(Old.station.name = Station, Station = New.name)
-turnstile.clean.df <- left_join(x = turnstile.clean.df, y = stations.latlong.df[, c("Station", "Lat", "Long")], by = "Station")
-rm(station.line.pairs)
-
-
 # using the preprocessed lat long data ------------------------------------
 
 #import list of stations and tidy | need this for lat long
@@ -254,7 +168,7 @@ turnstile.clean.df.2 <- left_join(turnstile.df, github.latlong.df[, c("Unit", "B
 # same map but using the pre-processed data
 turnstile.clean.df.2 %>%
   group_by(Station, Lat, Long) %>%
-  summarize(Monthly.ridership = sum(diff)) %>%
+  summarize(Monthly.ridership = sum(Entries)) %>%
   ggplot() +
   geom_polygon(data = nyc.df,
                aes(x = long, y = lat, group = group),
@@ -277,6 +191,46 @@ turnstile.clean.df.2 %>%
 #        path = project.path,
 #        width = 8,
 #        height = 6)
+
+# map segmented by commuting hours
+turnstile.clean.df.2 %>%
+  ungroup() %>%
+  select(Date, Time, Station, Lat, Long, Entries, Exits) %>%
+  filter(wday(Date) < 6) %>%
+  mutate(Morning = hour(Time) >= 6 & hour(Time) <= 10,
+         Evening = hour(Time) >= 16 & hour(Time) <= 20) %>%
+  filter(Morning | Evening) %>%
+  gather(key = "Type", value = "Count", -c("Date", "Time", "Station", "Lat", "Long", "Morning", "Evening")) %>%
+  mutate(Time.of.Day = if_else(Morning, "6am-10am", if_else(Evening, "4pm-8pm", "NULL")), #collpase Morning/Evening into one variable
+         Time.of.Day = factor(Time.of.Day, levels = c("6am-10am", "4pm-8pm")), #reorder so facets are ordered correctly
+         Type = factor(Type, levels = c("Entries", "Exits"))) %>% #reorder so legend is ordered correctly
+  group_by(Station, Lat, Long, Type, Time.of.Day) %>%
+  summarize(Monthly.ridership = sum(Count)) %>%
+  ggplot() +
+  geom_polygon(data = nyc.df,
+               aes(x = long, y = lat, group = group),
+               fill = "gray80") +
+  geom_point(aes(x = Long, y = Lat, color = Type, size = Monthly.ridership), alpha = 0.4) +
+  coord_quickmap(xlim = c(-74.05, -73.9),
+                 ylim = c(40.65, 40.82)) +
+  scale_color_manual(values = c("darkblue", "indianred2"),
+                     name = NULL,
+                     guide = "none") +
+  scale_size_continuous(name = "Monthly ridership",
+                        labels = scales::comma) +
+  labs(title = "Monthly ridership for each subway station",
+       subtitle = "September 2019") +
+  theme(legend.position = "bottom") +
+  light.theme +
+  theme(axis.title = element_blank(),
+        panel.spacing.x = unit(2, "lines")) +
+  facet_grid(Type ~ Time.of.Day)
+
+# ggsave(filename = "Plots/Subway_time_map.svg",
+#        plot = last_plot(),
+#        device = "svg",
+#        width = 8,
+#        height = 11)
 
 #create animated map of ridership hourly
 subway.plot <- turnstile.clean.df.2 %>%
@@ -497,3 +451,101 @@ turnstile.clean.df.2 %>%
   annotate("text", x = 6.7, y = 155000, label = 'bold("GCT")', parse =TRUE, color = "#2b7551") +
   annotate("text", x = 6.7, y = 140000, label = 'bold("34th St")', parse =TRUE, color = "forestgreen") +
   light.theme
+
+
+# add lat long ------------------------------------------------------------
+
+# core problem is that the turnstile data doesn't have lat long info
+# goal is to merge with a dataset known list of stations with lat long
+# but dataset station names don't match so we need to fuzzy match
+
+#import list of stations and tidy | need this for lat long
+stations.latlong.df <- GET("https://data.cityofnewyork.us/api/views/kk4q-3rt2/rows.csv?accessType=DOWNLOAD")
+stations.latlong.df <- content(stations.latlong.df)
+
+# change names to proper case
+names(stations.latlong.df) <- sapply(names(stations.latlong.df), toproper)
+
+#seperate out the lat/long
+stations.latlong.df <- stations.latlong.df %>%
+  mutate(The_geom = str_remove(The_geom, "POINT [(]") %>% str_remove(., "[)]")) %>%
+  separate(The_geom, into = c("Long", "Lat"), sep = " ") %>%
+  mutate(Lat = as.double(Lat),
+         Long = as.double(Long)) %>%
+  rename(Station = Name) %>%
+  select(Station, Lat, Long, Line)
+
+#check the station names; most station names don't match so need to fuzzy match
+unique(turnstile.df$Station)
+unique(stations.latlong.df$Station)
+
+# need to match on station name and line; check line first then match name?
+# match subway line letters by splitting apart and checking individually
+# need to clean up stations.latlong.df$Line first; remove "express" so E doesn't match it
+stations.latlong.df$Line <- lapply(stations.latlong.df$Line, function(line) str_remove_all(line, "Express"))
+stations.latlong.df$Line <- sapply(stations.latlong.df$Line, function(line) str_split(line, "-"))
+
+# similarly clean up the equavalent column in turnstile.df
+turnstile.df$Linename <- sapply(turnstile.df$Linename, function(line) str_split(line, ""))
+
+# make station names lower case so they match better
+stations.latlong.df$Station <- tolower(stations.latlong.df$Station)
+turnstile.df$Station <- tolower(turnstile.df$Station)
+
+get_new_name <- function(old.name, subway.lines){
+  
+  # function returns a matching station name from the new lat/long dataset
+  # it first creates a possible list of new station names based on which subway
+  #   lines are served
+  # then it fuzzy matches the name of the old.name against the list
+  #   of new station news
+  
+  # count of how many stations are matched in the new data
+  match.counts <- sapply(stations.latlong.df$Line, function(x) sum(subway.lines %in% x))
+  
+  # find the station names that match within two stations or at least one station
+  match.stations <- stations.latlong.df$Station[match.counts >= max(1, max(match.counts) - 2)]
+  
+  # now fuzzy match the station name within this list
+  new.name <- stringsim(old.name, match.stations, method = "osa") %>% which.max(.) %>% match.stations[.]
+  
+  return(new.name)
+}
+
+# get only unique pairs of station and lines
+station.line.pairs <- turnstile.df[,c("Station", "Linename")][!duplicated(turnstile.df[,c("Station", "Linename")]),]
+
+# apply the get_new_name function over the unique pairs data frame
+station.line.pairs$New.name <- lapply(1:nrow(station.line.pairs), function(index) {
+  get_new_name(station.line.pairs$Station[[index]], station.line.pairs$Linename[[index]])
+})
+
+# seems to still be some issues. e.g. below stations
+# 34 st-herald sq
+# 14 st-union sq
+# botanic garden
+# and more
+
+#manually fix a few station
+station.line.pairs$New.name[station.line.pairs$Station == "34 st-herald sq"] <- "herald sq - 34th st"
+station.line.pairs$New.name[station.line.pairs$Station == "14 st-union sq"] <- "union sq - 14th st"
+
+#string sim scores of the station name matches
+station.line.pairs %>%
+  rowwise() %>%
+  mutate(Score = stringsim(Station, New.name)) %>%
+  ggplot(aes(x = Score)) +
+  geom_histogram(color = "white", binwidth = 0.05)
+
+# unlist the new name and line
+station.line.pairs$Linename <- sapply(station.line.pairs$Linename, function(x) unlist(x) %>% paste(., collapse = "-"))
+turnstile.df$Linename <- sapply(turnstile.df$Linename, function(x) unlist(x) %>% paste(., collapse = "-"))
+station.line.pairs$New.name <- sapply(station.line.pairs$New.name, unlist) #is this neccessary still?
+
+# merge with the new data frame to get lat long
+turnstile.clean.df <- left_join(x = turnstile.df, y = station.line.pairs, by = c("Station", "Linename"))
+turnstile.clean.df <- turnstile.clean.df %>% rename(Old.station.name = Station, Station = New.name)
+turnstile.clean.df <- left_join(x = turnstile.clean.df, y = stations.latlong.df[, c("Station", "Lat", "Long")], by = "Station")
+rm(station.line.pairs)
+
+

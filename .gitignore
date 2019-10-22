@@ -4,6 +4,6 @@
 .Ruserdata
 
 Citi-bike/Data/*.csv
-Subway-turnstiles/Data/*.txt
+Subway-turnstiles/Data/turnstile*.txt
 Taxi/Data/*.csv
 .DS_Store
