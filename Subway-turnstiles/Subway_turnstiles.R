@@ -476,8 +476,8 @@ stations.latlong.df <- stations.latlong.df %>%
   select(Station, Lat, Long, Line)
 
 #check the station names; most station names don't match so need to fuzzy match
-unique(turnstile.df$Station)
-unique(stations.latlong.df$Station)
+# unique(turnstile.df$Station)
+# unique(stations.latlong.df$Station)
 
 # need to match on station name and line; check line first then match name?
 # match subway line letters by splitting apart and checking individually
@@ -492,8 +492,10 @@ turnstile.df$Linename <- sapply(turnstile.df$Linename, function(line) str_split(
 stations.latlong.df$Station <- tolower(stations.latlong.df$Station)
 turnstile.df$Station <- tolower(turnstile.df$Station)
 
-# replace ave with av
+# replace ave and avenue with av
 stations.latlong.df$Station <- str_replace_all(stations.latlong.df$Station, " ave"," av")
+stations.latlong.df$Station <- str_replace_all(stations.latlong.df$Station, " ave"," av")
+turnstile.df$Station <- str_replace_all(turnstile.df$Station, " avenue"," av")
 turnstile.df$Station <- str_replace_all(turnstile.df$Station, " ave"," av")
 
 # replace street with st
@@ -512,6 +514,7 @@ stations.latlong.df$Station[grep("[0-9]rd", stations.latlong.df$Station)] <- str
 turnstile.df$Station[grep("[0-9]th", turnstile.df$Station)] <- str_remove_all(turnstile.df$Station[grep("[0-9]th", turnstile.df$Station)], "th")
 
 # remove "nd"s 
+stations.latlong.df$Station[grep("[0-9]nd", stations.latlong.df$Station)] <- str_remove_all(stations.latlong.df$Station[grep("[0-9]nd", stations.latlong.df$Station)], "nd")
 
 get_new_name <- function(old.name, subway.lines){
   
@@ -545,11 +548,20 @@ station.line.pairs$New.name <- lapply(1:nrow(station.line.pairs), function(index
 # 34 st-herald sq
 # 14 st-union sq
 # botanic garden
+# 121 st
+# 181 st
+# canal st
+# aqueduct n.cond
+# orchard beach
+# newark hw bmebe
+# harrison
+# journal square
 # and more
 
 #manually fix a few station
 station.line.pairs$New.name[station.line.pairs$Station == "34 st-herald sq"] <- "herald sq - 34th st"
 station.line.pairs$New.name[station.line.pairs$Station == "14 st-union sq"] <- "union sq - 14th st"
+
 
 #string sim scores of the station name matches
 station.line.pairs %>%
