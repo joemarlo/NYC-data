@@ -492,6 +492,27 @@ turnstile.df$Linename <- sapply(turnstile.df$Linename, function(line) str_split(
 stations.latlong.df$Station <- tolower(stations.latlong.df$Station)
 turnstile.df$Station <- tolower(turnstile.df$Station)
 
+# replace ave with av
+stations.latlong.df$Station <- str_replace_all(stations.latlong.df$Station, " ave"," av")
+turnstile.df$Station <- str_replace_all(turnstile.df$Station, " ave"," av")
+
+# replace street with st
+turnstile.df$Station <- str_replace_all(turnstile.df$Station, " street"," st")
+
+# replace road with rd
+stations.latlong.df$Station <- str_replace_all(stations.latlong.df$Station, " road"," rd")
+turnstile.df$Station <- str_replace_all(turnstile.df$Station, " road"," rd")
+
+# replace place with pl
+turnstile.df$Station <- str_replace_all(turnstile.df$Station, " place"," pl")
+
+# remove "ths" and "rd" after street numbers
+stations.latlong.df$Station[grep("[0-9]th", stations.latlong.df$Station)] <- str_remove_all(stations.latlong.df$Station[grep("[0-9]th", stations.latlong.df$Station)], "th")
+stations.latlong.df$Station[grep("[0-9]rd", stations.latlong.df$Station)] <- str_remove_all(stations.latlong.df$Station[grep("[0-9]rd", stations.latlong.df$Station)], "rd")
+turnstile.df$Station[grep("[0-9]th", turnstile.df$Station)] <- str_remove_all(turnstile.df$Station[grep("[0-9]th", turnstile.df$Station)], "th")
+
+# remove "nd"s 
+
 get_new_name <- function(old.name, subway.lines){
   
   # function returns a matching station name from the new lat/long dataset
