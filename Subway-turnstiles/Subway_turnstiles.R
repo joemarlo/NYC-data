@@ -32,6 +32,8 @@ turnstile.df <- tbl(conn, "turnstile.2019.09") %>%
 #   summarize(Entries = sum(Entries),
 #             Exits = sum(Exits))
 
+# disconnect from the database
+dbDisconnect(conn)
 
 # helper functions --------------------------------------------------------
 
@@ -77,7 +79,9 @@ hist(turnstile.df$Exits, breaks = breaks, plot = FALSE)$counts
 rm(breaks)
 
 #net entries and exits
-scales::percent((sum(turnstile.df$Entries, na.rm = TRUE) - sum(turnstile.df$Exits, na.rm = TRUE)) / sum(turnstile.df$Entries, na.rm = TRUE))
+scales::percent((sum(turnstile.df$Entries, na.rm = TRUE) -
+                 sum(turnstile.df$Exits, na.rm = TRUE)) /
+                 sum(turnstile.df$Entries, na.rm = TRUE))
 
 # EDA ---------------------------------------------------------------------
 
@@ -130,7 +134,7 @@ turnstile.df %>%
 #import list of stations and tidy | need this for lat long | save for later use
 stations.latlong.df <- GET("https://data.cityofnewyork.us/api/views/kk4q-3rt2/rows.csv?accessType=DOWNLOAD")
 stations.latlong.df <- content(stations.latlong.df)
-write_csv(stations.latlong.df, "Subway-turnstiles/Data/stations.latlong.df.csv")
+# write_csv(stations.latlong.df, "Subway-turnstiles/Data/stations.latlong.df.csv")
 
 # change names to proper case
 names(stations.latlong.df) <- sapply(names(stations.latlong.df), toproper)
@@ -157,7 +161,7 @@ stations.latlong.df$Line <- str_remove_all(stations.latlong.df$Line, "Express")
 
 # split out the letters from the lines column
 stations.latlong.df$Line <- str_split(stations.latlong.df$Line, "-")
-turnstile.df$Linename <- sapply(turnstile.df$Linename, function(line) str_split(line, ""))
+turnstile.df$Linename <- str_split(turnstile.df$Linename, "")
 
 # make station names lower case so they match better
 stations.latlong.df$Station <- tolower(stations.latlong.df$Station)

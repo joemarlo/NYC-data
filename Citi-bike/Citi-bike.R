@@ -5,56 +5,54 @@ library(gridExtra)
 source("Plots/ggplot-theme.R")
 options(scipen = 999)
 
-project.path <- getwd()
+# connect to database and read in data to memory --------------------------
 
-# data import and cleanup -------------------------------------------------------------
+# establish the connections to the database
+conn <- dbConnect(RSQLite::SQLite(), "NYC.db")
 
-read_combine <- function(thisPath) {
-  # function to import and combine the csvs within a file path
-  # output is a dataframe of all the csv's rowbind'd together
-  
-  fileNames <- list.files(path = thisPath, pattern = "2019[0-1][1-9]-citibike-tripdata.csv")
-  lapply(fileNames, function(fileName) {
-    read_csv(
-      paste(thisPath, fileName, sep = "/"),
-      col_types = cols(
-        `birth year` = col_double(),
-        `end station id` = col_double(),
-        `start station id` = col_double(),
-        `end station latitude` = col_double(), 
-        `end station longitude` = col_double(), 
-        `start station latitude` = col_double(), 
-        `start station longitude` = col_double(),
-        starttime = col_datetime(format = "%Y-%m-%d %H:%M:%S"),
-        stoptime = col_datetime(format = "%Y-%m-%d %H:%M:%S"),
-        tripduration = col_integer()
-      )
+# read in just September data into memory
+bike.trips.df <- tbl(conn, "citibike.2019.08") %>%
+  as_tibble() %>%
+  mutate(Starttime = as_datetime(Starttime),
+         Stoptime = as_datetime(Stoptime),
+         Gender = factor(Gender, levels = c("Unknown", "Male", "Female")))
+
+# read in all of 2019 data
+files.2019 <- db_list_tables(conn) %>% grep("citibike.2019.[01-12]", ., value = TRUE)
+bike.trips.df <- lapply(files.2019, function(file) {
+  tbl(conn, file) %>%
+    as_tibble() %>%
+    mutate(Starttime = as_datetime(Starttime),
+           Stoptime = as_datetime(Stoptime),
+           Gender = factor(Gender, levels = c("Unknown", "Male", "Female"))
     )
-  }) %>%
-    bind_rows()
-}
+}) %>% bind_rows()
 
-# read the data in, examine, and cleanup
-bike.trips.df <- read_combine(paste0(project.path, "/Citi-bike/Data")) #read in 2019 data
-rm(read_combine)
-dim(bike.trips.df)
-names(bike.trips.df) <- str_replace_all(names(bike.trips.df), " ", ".")
-bike.trips.df$gender <- factor(bike.trips.df$gender, levels = c(0, 1, 2),
-                                 labels = c("Unknown", "Male", "Female"))
+# can also query on disk like this
+# tmp <- tbl(conn, "turnstile.2019.09")
+# tmp %>%
+#   select(Station, Time, Entries, Exits) %>%
+#   group_by(Station) %>%
+#   summarize(Entries = sum(Entries),
+#             Exits = sum(Exits))
+
+
+
+# tidy up the data ---------------------------------------------------------------------
 
 # build df that has individual observations for start and end
 # original data has start and end on the same row
 tidy.bike.df.S <- bike.trips.df %>%
-  select(starttime, stoptime, start.station.latitude, start.station.longitude, gender, birth.year) %>%
+  select(Starttime, Stoptime, Start.station.latitude, Start.station.longitude, Gender, Birth.year) %>%
   mutate(Type = "Start") %>%
-  rename(Lat = start.station.latitude,
-         Long = start.station.longitude)
+  rename(Lat = Start.station.latitude,
+         Long = Start.station.longitude)
 
 tidy.bike.df.E <- bike.trips.df %>%
-  select(starttime, stoptime, end.station.latitude, end.station.longitude, gender, birth.year) %>%
+  select(Starttime, Stoptime, End.station.latitude, End.station.longitude, Gender, Birth.year)  %>%
   mutate(Type = "End") %>%
-  rename(Lat = end.station.latitude,
-         Long = end.station.longitude)
+  rename(Lat = End.station.latitude,
+         Long = End.station.longitude)
 
 tidybike.df <- rbind(tidy.bike.df.S, tidy.bike.df.E)
 rm(tidy.bike.df.S, tidy.bike.df.E)
@@ -67,9 +65,9 @@ samp_rows <- sample(nrow(tidybike.df), 1000000)
 
 # plot trip ends and trip starts faceted commuting hours
 tidybike.df[samp_rows,] %>%
-  filter(wday(starttime) < 6) %>% #weekdays only
-  mutate(Morning = hour(starttime) >= 6 & hour(starttime) <= 10,
-         Evening = hour(starttime) >= 16 & hour(starttime) <= 20) %>%
+  filter(wday(Starttime) < 6) %>% #weekdays only
+  mutate(Morning = hour(Starttime) >= 6 & hour(Starttime) <= 10,
+         Evening = hour(Starttime) >= 16 & hour(Starttime) <= 20) %>%
   filter(Morning | Evening) %>%
   rowwise() %>%
   mutate(Time.of.Day = if_else(Morning, "6am-10am", if_else(Evening, "4pm-8pm", "NULL")), #collpase Morning/Evening into one variable
@@ -100,7 +98,6 @@ tidybike.df[samp_rows,] %>%
 # ggsave(filename = "Plots/Commuting_light.png",
 #        plot = last_plot(),
 #        device = "png",
-#        path = project.path,
 #        width = 8,
 #        height = 7)
 
