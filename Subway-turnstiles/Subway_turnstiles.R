@@ -226,12 +226,11 @@ station.line.pairs <- station.line.pairs[!is.na(station.line.pairs$Station),]
 # apply the get_new_name function over the unique pairs data frame
 station.line.pairs <- lapply(1:nrow(station.line.pairs), function(index) {
   get_new_name(station.line.pairs$Station[[index]], station.line.pairs$Linename[[index]])
-}) %>% bind_rows() %>% bind_cols(station.line.pairs, .)
-
-#rename the columns
-station.line.pairs <- rename(station.line.pairs,
-                             New.name = Station1,
-                             New.line = Line)
+}) %>%
+  bind_rows() %>%
+  bind_cols(station.line.pairs, .) %>%
+  rename(New.name = Station1,
+         New.line = Line)
 
 # seems to still be some issues. the below 50 didn't match well (about 10% of total stations)
 # 34 st-herald sq

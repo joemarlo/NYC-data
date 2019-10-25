@@ -10,12 +10,12 @@ options(scipen = 999)
 # establish the connections to the database
 conn <- dbConnect(RSQLite::SQLite(), "NYC.db")
 
-# read in just September data into memory
-bike.trips.df <- tbl(conn, "citibike.2019.08") %>%
-  as_tibble() %>%
-  mutate(Starttime = as_datetime(Starttime),
-         Stoptime = as_datetime(Stoptime),
-         Gender = factor(Gender, levels = c("Unknown", "Male", "Female")))
+# # read in just September data into memory
+# bike.trips.df <- tbl(conn, "citibike.2019.08") %>%
+#   as_tibble() %>%
+#   mutate(Starttime = as_datetime(Starttime),
+#          Stoptime = as_datetime(Stoptime),
+#          Gender = factor(Gender, levels = c("Unknown", "Male", "Female")))
 
 # read in all of 2019 data
 files.2019 <- db_list_tables(conn) %>% grep("citibike.2019.[01-12]", ., value = TRUE)
@@ -36,7 +36,8 @@ bike.trips.df <- lapply(files.2019, function(file) {
 #   summarize(Entries = sum(Entries),
 #             Exits = sum(Exits))
 
-
+# disconnect from the database
+dbDisconnect(conn)
 
 # tidy up the data ---------------------------------------------------------------------
 
