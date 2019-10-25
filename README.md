@@ -27,7 +27,7 @@ turnstile.df <- tbl(conn, "turnstile.2019.09") %>% as_tibble()
 
 </br>
 
-### Visualizations
+### Visualizations created from the database
 
 <p align="center">
 <img src="Plots/Commuting_light.png" width=80%>
