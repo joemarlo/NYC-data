@@ -7,41 +7,39 @@ library(stringdist)
 library(parallel)
 library(gganimate)
 library(gifski)
+library(RSQLite)
 source("Plots/ggplot-theme.R")
 
 cpu.cores <- detectCores()
 
 
-#function to read in the data, format, and then combine to one dataframe
-read_subway_files<- function(year){
-  filenames <- list.files(path = "Subway-turnstiles/Data/",
-                          pattern = paste0("turnstile_", year, ".....txt"),
-                          all.files = FALSE, full.names = FALSE,
-                          recursive = FALSE, ignore.case = FALSE)
-  map_df(filenames, function(filename){
-    NameDF <- read_csv(file = paste0("Subway-turnstiles/Data/", filename),
-                       col_types = cols(
-                         DATE = col_date(format = "%m/%d/%Y"),
-                         ENTRIES = col_double(),
-                         EXITS = col_double(),
-                         TIME = col_time(format = "%H:%M:%S")
-                       ))
-    NameDF$Source.file <- filename
-    return(NameDF)
-  })
-}
+# connect to database and read in data to memory --------------------------
 
-#read in the files
-turnstile.df <- read_subway_files(19) %>% bind_rows()
-rm(read_subway_files)
+# establish the connections to the database
+conn <- dbConnect(RSQLite::SQLite(), "NYC.db")
 
-# data clean up-------------------------------------------------------------------------
+# read in just September data into memory
+turnstile.df <- tbl(conn, "turnstile.2019.09") %>%
+  as_tibble() %>%
+  mutate(Date = as.Date(Date, origin = "1970-01-01"),
+         Time = as_hms(Time))
+
+# can also query on disk like this
+# tmp <- tbl(conn, "turnstile.2019.09")
+# tmp %>%
+#   select(Station, Time, Entries, Exits) %>%
+#   group_by(Station) %>%
+#   summarize(Entries = sum(Entries),
+#             Exits = sum(Exits))
+
+
+# helper functions --------------------------------------------------------
 
 # change names to proper case
 toproper <- function(name) paste0(toupper(substr(name, 1, 1)), tolower(substring(name, 2)))
-names(turnstile.df) <- sapply(names(turnstile.df), toproper)
-names(turnstile.df)[1] <- "Booth"
-names(turnstile.df)[3] <- "SCP"
+
+
+# data clean up-------------------------------------------------------------------------
 
 #only include "regular" and "recover audit" measurements. Others include maintenance checks
 turnstile.df <- turnstile.df %>% filter(Desc == "REGULAR" | Desc == "RECOVR AUD")
@@ -86,7 +84,7 @@ scales::percent((sum(turnstile.df$Entries, na.rm = TRUE) - sum(turnstile.df$Exit
 # top stations by day
 turnstile.df %>%
   group_by(Station, Date) %>%
-  summarize(Daily.ridership = sum(diff)) %>%
+  summarize(Daily.ridership = sum(Entries)) %>%
   group_by(Station) %>%
   summarize(Daily.ridership = mean(Daily.ridership)) %>%
   arrange(desc(Daily.ridership))
@@ -129,7 +127,7 @@ turnstile.df %>%
 # goal is to merge with a dataset known list of stations with lat long
 # but dataset station names don't match so we need to fuzzy match
 
-#import list of stations and tidy | need this for lat long
+#import list of stations and tidy | need this for lat long | save for later use
 stations.latlong.df <- GET("https://data.cityofnewyork.us/api/views/kk4q-3rt2/rows.csv?accessType=DOWNLOAD")
 stations.latlong.df <- content(stations.latlong.df)
 write_csv(stations.latlong.df, "Subway-turnstiles/Data/stations.latlong.df.csv")
@@ -388,7 +386,7 @@ turnstile.clean.df %>%
                      guide = "none") +
   scale_size_continuous(name = "Monthly ridership",
                         labels = scales::comma) +
-  labs(title = "Monthly ridership for each subway station",
+  labs(title = "Monthly ridership for each subway station during commuting hours",
        subtitle = "September 2019") +
   theme(legend.position = "bottom") +
   light.theme +
@@ -443,189 +441,10 @@ subway.gif <- animate(subway.plot,
 
 
 
-# scratch code ------------------------------------------------------------
+# second option to lat long data: use preprocessed lat long data ------------------------------------
 
-#calculate entries by grouping by time
-# entries_exits <- turnstile_190928 %>%
-#   group_by(STATION, DATE, TIME) %>%
-#   # filter(TIME == as.hms("20:00:00")) %>%
-#   # # filter(as.POSIXlt(TIME)$sec == 0,
-#   # #        as.POSIXlt(TIME)$min == 0,
-#   # #        TIME == max(TIME)) %>%
-#   summarize(ENTRIES = sum(ENTRIES),
-#             EXITS = sum(EXITS)) %>%
-#   group_by(STATION) %>%
-#   arrange(STATION, DATE,) %>%
-#   mutate(Total_entries = ENTRIES - lag(ENTRIES),
-#          Total_exits = EXITS - lag(EXITS)) %>%
-#   select(-c(ENTRIES, EXITS)) %>%
-#   ungroup()
-  
-#calculate entries by indexing 
-entries_exits <- turnstile_190928 %>%
-  filter(TIME %in% as_hms(paste0(seq(2, 20, 2), ":00:00"))) %>% #removes unique times
-  arrange(STATION, `C/A`, UNIT, LINENAME, DIVISION, desc(DATE), desc(TIME), desc(ENTRIES), desc(EXITS)) %>%
-  group_by(STATION, DATE, TIME) %>%
-  mutate(turnstile_ID = row_number(),
-         unique_ID = paste(STATION, turnstile_ID, sep = "-")) %>%
-  ungroup()
-
-
-# potential winsoring methodologies below
-entries_exits2 <- invisible(mclapply(
-  X = unique(entries_exits$unique_ID),
-  mc.cores = cpu.cores,
-  FUN = function(ID) {
-    x <- entries_exits[entries_exits$unique_ID == ID, ]$ENTRIES
-    
-    #remove outliers outside +- IQR
-    medx <- median(x)
-    IQRx <- IQR(x)
-    constant <- 10000
-    x[x < (medx - constant)] <- NA
-    x[x > (medx + constant)] <- NA
-    
-    return(x)
-  })) %>% unlist()
-
-
-# apply winsorizing at the turnstile level; this doesn't work well
-# invisible(mclapply(
-#   X = unique(entries_exits$unique_ID),
-#   mc.cores = cpu.cores,
-#   FUN = function(ID) {
-#     entries_exits[entries_exits$unique_ID == ID,]$ENTRIES <<-
-#       Winsorize(
-#         x = entries_exits[entries_exits$unique_ID == ID,]$ENTRIES,
-#         minval = 0,
-#         # maxval = 100000,
-#         probs = c(0.1, 0.9),
-#         na.rm = TRUE
-#       )
-#   }
-# ))
-
-
-# or remove entries that are above a certain threshold
-invisible(
-  lapply(unique(entries_exits$STATION),
-         function(station) {
-           group <- entries_exits[entries_exits$STATION == station,]$Total_entries
-           entries_exits[entries_exits$STATION == station,]$Total_entries <<-
-             case_when(
-               group < 0 ~ 0,
-               group < 100000 ~ group,
-               group >= 100000 ~ 0)
-         }
-  )
-)
-
-# apply winsorizing at the station level
-invisible(
-  lapply(unique(entries_exits$STATION),
-         function(station) {
-           entries_exits[entries_exits$STATION == station,]$Total_entries <<-
-             entries_exits[entries_exits$STATION == station,]$Total_entries %>%
-             Winsorize(.,
-                       minval = 0,
-                       # maxval = 100000,
-                       probs = c(0, 0.9),
-                       na.rm = TRUE)
-         }
-  )
-)
-
-
-range(entries_exits$Total_entries, na.rm = T)
-
-entries_exits %>%
-  group_by(STATION, DATE) %>%
-  summarize(Total_entries = sum(Total_entries, na.rm = TRUE)) %>% 
-  summarize(Total_entries = mean(Total_entries, na.rm = TRUE)) %>%
-  arrange(desc(Total_entries)) %>%
-  View()
-
-entries_exits %>%
-  filter(STATION == "PATH NEW WTC") %>%
-  View()
-
-entries_exits %>%
-  group_by(STATION, DATE, TIME) %>%
-  summarize(Total_entries = sum(Total_entries, na.rm = TRUE)) %>%
-  ggplot(aes(x = TIME, y = Total_entries, group = DATE, color = DATE, alpha = 0.2)) +
-  geom_line()
-
-
-new.names <- lapply(1:nrow(turnstile.df), function(line) {
-  
-  subway.lines <- turnstile.df$Linename[[line]]
-  old.name <- turnstile.df$Station[[line]]
-  
-  # count of how many stations are matched in the new data
-  match.counts <- sapply(stations.latlong.df$Line, function(x) sum(subway.lines %in% x))
-  
-  # find the station names that match within one stations
-  match.stations <- stations.latlong.df$Station[match.counts >= max(match.counts) - 2]
-  
-  # now fuzzy match the station name within this list
-  new.name <- stringsim(old.name, match.stations, method = "osa") %>% which.max(.) %>% match.stations[.]
-  
-  return(new.name)
-})
-
-
-#match the original names to the new names using stringsim method
-orig_names <- unique(turnstile.df$Station)
-new_names <- sapply(orig_names, function(x){
-  index <- stringsim(x, unique(stations_df$STATION), method = "osa") %>% which.max(.)
-  unique(stations_df$STATION)[index]
-})
-
-#rerun the previous function with "qgram" and "cosine" as the method; create lookup matching table to see which one works best
-name_match_tbl <- tibble(Orig = orig_names, New_osa = new_names) #, New_qgram = new_names_2, New_cosine = new_names_3)
-View(name_match_tbl)
-
-#examine where the methods don't agree
-name_match_tbl %>%
-  filter(!(New_osa == New_qgram & New_osa == New_cosine)) %>%
-  View()
-#"osa" method seems like the best after manually examining
-#a better method would to be not allow duplicates and then maximize average stringsim score.
-#   it won't work though b/c stations_df has fewer station names than the turnstile data
-
-#use the osa method to replace names in the turnstile dataset and add lat/long
-turnstile_190928$STATION <- name_match_tbl$New_osa[match(turnstile_190928$STATION, name_match_tbl$Orig)]
-turnstile_190928 <- left_join(x = turnstile_190928, y = stations_df, by = "STATION")
-
-
-# recreate thte first plot to see if it still makes sense:  station ridership by day of the week
-turnstile.clean.df.2 %>%
-  group_by(Date, Station, Linename, Lat, Long) %>%
-  summarize(Daily = sum(diff)) %>%
-  group_by(wday(Date), Station, Linename, Lat, Long) %>%
-  summarize(Daily = mean(Daily)) %>%
-  rename(WeekDay = `wday(Date)`) %>%
-  mutate(Color.group = case_when(Station == "grand central - 42nd st" ~ "ColGroup1",
-                                 Station == "herald sq - 34th st" ~ "#ColGroup2",
-                                 TRUE ~ "ColGroup3")) %>%
-  ggplot(aes(x = WeekDay, y = Daily, group = Station, color = Color.group)) +
-  geom_line(alpha = 0.4) +
-  scale_colour_manual(values = c("forestgreen", "#2b7551", "gray80")) +
-  theme(legend.position = "none") +
-  scale_x_continuous(breaks = 1:7,
-                     labels = c("Monday", "Tuesday", "Wedneday", "Thursday", "Friday", "Saturday", "Sunday"),
-                     name = NULL) +
-  scale_y_continuous(labels = scales::comma,
-                     name = "Daily station ridership") +
-  labs(title = "Daily subway ridership by station",
-       subtitle = "September 2019") +
-  annotate("text", x = 6.7, y = 155000, label = 'bold("GCT")', parse =TRUE, color = "#2b7551") +
-  annotate("text", x = 6.7, y = 140000, label = 'bold("34th St")', parse =TRUE, color = "forestgreen") +
-  light.theme
-
-# using the preprocessed lat long data ------------------------------------
-
-#import list of stations and tidy | need this for lat long
+# import list of stations and tidy | need this for lat long
+# note that this dataset is not up to date; doesn't include 2nd ave subway
 github.latlong.df <- read_csv("https://raw.githubusercontent.com/chriswhong/nycturnstiles/master/geocoded.csv", 
                               col_names = FALSE)
 #rename the columns
