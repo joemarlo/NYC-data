@@ -6,14 +6,14 @@ The goal of this project is to pull together a database of the various NYC trans
 - `Subway_turnstiles.R`
 - `Taxi.R`
 
-`Create_database.R`: creates a database of the Citi-bike, Subway, and (eventually) the Taxi data. Shell scripts in each folder must be run first to download the data
+`Create_database.R`: creates a SQLite database of the Citi-bike, Subway, and (eventually) the Taxi data. Shell scripts in each folder must be run first to download the data
 
 Once the database is created, data can easily be accessed via SQL and [dbplyr](https://dbplyr.tidyverse.org/) queries:
 ```
 # establish the connection to the database
 conn <- dbConnect(RSQLite::SQLite(), "NYC.db")
 
-# query on disk
+# query and mutate on-disk
 turnstile.df <- tbl(conn, "turnstile.2019.09")
 turnstile.df %>%
   select(Station, Time, Entries, Exits) %>%
@@ -21,7 +21,7 @@ turnstile.df %>%
   summarize(Entries = sum(Entries),
             Exits = sum(Exits))
 
-# or pulled into memory
+# or pull data into memory and mutate as a standard data frame
 turnstile.df <- tbl(conn, "turnstile.2019.09") %>% as_tibble() 
 ```
 
