@@ -27,7 +27,7 @@ turnstile.df <- tbl(conn, "turnstile.2019.09") %>% as_tibble()
 
 </br>
 
-### Preliminary visualizations
+### Visualizations
 
 <p align="center">
 <img src="Plots/Commuting_light.png" width=80%>
@@ -36,7 +36,6 @@ turnstile.df <- tbl(conn, "turnstile.2019.09") %>% as_tibble()
 <p align="center">
 <img src="Plots/Subway_time_map.svg" width=83%>
 </p>
-
 
 <p align="center">
 <img src="Plots/subway_hourly.gif" width=57%>
