@@ -36,6 +36,7 @@ bike.trips.df <- tbl(conn, "citibike.2019") %>%
 # disconnect from the database
 dbDisconnect(conn)
 
+
 # tidy up the data ---------------------------------------------------------------------
 
 # build df that has individual observations for start and end
