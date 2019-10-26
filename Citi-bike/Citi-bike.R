@@ -8,7 +8,7 @@ options(scipen = 999)
 
 # connect to database and read in data to memory --------------------------
 
-# establish the connections to the database
+# establish the connection to the database
 conn <- dbConnect(RSQLite::SQLite(), "NYC.db")
 
 # # read in just September data into memory
