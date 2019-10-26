@@ -222,7 +222,8 @@ sapply(years.to.import, function(year) {
         Bikeid = "int",
         Usertype = "text",
         Birth.year = "int",
-        Gender = "text"
+        Gender = "text",
+        Source.file = "text"
       )
     )
   } else{
