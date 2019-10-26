@@ -1,6 +1,6 @@
 # NYC-data
 
-The goal of this project is to pull together a database of the various NYC transportation options to ease and accelerate future analyses. Individual files to clean and analyze the data are in the folders: [Citi-bike](Citi-bike), [Subway-turnstiles](Subway-turnstiles), [Taxi](Taxi):
+The goal of this project is to pull together a database of the various NYC transportation options to ease and expedite future analyses. Individual files to clean and analyze the data are in the folders: [Citi-bike](Citi-bike), [Subway-turnstiles](Subway-turnstiles), [Taxi](Taxi):
 
 - `Citi-bike.R`
 - `Subway_turnstiles.R`
@@ -14,15 +14,15 @@ Once the database is created, data can easily be accessed via SQL and [dbplyr](h
 conn <- dbConnect(RSQLite::SQLite(), "NYC.db")
 
 # query and mutate on-disk
-turnstile.df <- tbl(conn, "turnstile.2019.09")
+turnstile.df <- tbl(conn, "turnstile.2019")
 turnstile.df %>%
   select(Station, Time, Entries, Exits) %>%
   group_by(Station) %>%
   summarize(Entries = sum(Entries),
             Exits = sum(Exits))
 
-# or pull data into memory and mutate as a standard data frame
-turnstile.df <- tbl(conn, "turnstile.2019.09") %>% as_tibble() 
+# or pull data into memory and then treat as a standard data frame
+turnstile.df <- tbl(conn, "turnstile.2019") %>% collect() 
 ```
 
 </br>

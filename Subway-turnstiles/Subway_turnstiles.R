@@ -19,11 +19,15 @@ cpu.cores <- detectCores()
 conn <- dbConnect(RSQLite::SQLite(), "NYC.db")
 
 # read in just September data into memory
-turnstile.df <- tbl(conn, "turnstile.2019.09") %>%
-  as_tibble() %>%
+turnstile.df <- tbl(conn, "turnstile.2019") %>%
+  filter(Source.file == "turnstile_190921.txt" |
+         Source.file == "turnstile_190928.txt" |
+         Source.file == "turnstile_190914.txt" |
+         Source.file == "turnstile_190907.txt") %>%
+  collect() %>%
   mutate(Date = as.Date(Date, origin = "1970-01-01"),
          Time = as_hms(Time))
-
+  
 # can also query on disk like this
 # tmp <- tbl(conn, "turnstile.2019.09")
 # tmp %>%

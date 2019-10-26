@@ -19,15 +19,11 @@ conn <- dbConnect(RSQLite::SQLite(), "NYC.db")
 #          Gender = factor(Gender, levels = c("Unknown", "Male", "Female")))
 
 # read in all of 2019 data
-files.2019 <- dbListTables(conn) %>% grep("citibike.2019.[01-12]", ., value = TRUE)
-bike.trips.df <- map_df(files.2019, function(file) {
-  tbl(conn, file) %>%
-    as_tibble() %>%
-    mutate(Starttime = as_datetime(Starttime),
-           Stoptime = as_datetime(Stoptime),
-           Gender = factor(Gender, levels = c("Unknown", "Male", "Female"))
-    )
-})
+bike.trips.df <- tbl(conn, "citibike.2019") %>%
+  collect() %>%
+  mutate(Starttime = as_datetime(Starttime),
+         Stoptime = as_datetime(Stoptime),
+         Gender = factor(Gender, levels = c("Unknown", "Male", "Female")))
 
 # can also query on disk like this
 # tmp <- tbl(conn, "turnstile.2019.09")
