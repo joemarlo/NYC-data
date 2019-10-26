@@ -79,7 +79,7 @@ tidybike.df[samp_rows,] %>%
   geom_point(aes(x = Long, y = Lat, color = Type), size = 2.5, alpha = 0.05) +
   scale_color_manual(values = c("darkblue", "indianred2"),
                      name = NULL) +
-  guides(color = guide_legend(override.aes = list(alpha = 1))) + #overrides the alpha in the legend only
+  guides(color = guide_legend(override.aes = list(alpha = 1))) + #overrides the alpha in the legend only; makes the legend legible
   coord_quickmap(xlim = c(-74.05, -73.9),
                  ylim = c(40.65, 40.82)) +
   labs(title = "Start and end locations of Citi Bike trips during commuting hours",
