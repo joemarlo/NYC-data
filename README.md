@@ -6,7 +6,7 @@ The goal of this project is to pull together a database of the various NYC trans
 - `Subway_turnstiles.R`
 - `Taxi.R`
 
-`Create_database.R`: creates a SQLite database of the Citi-bike, Subway, and (eventually) the Taxi data. Shell scripts in each folder must be run first to download the data. Currently the database is approximately 20gb representing 150mm rows.
+`Create_database.R`: creates a SQLite database of the Citi-bike, Subway, and (eventually) the Taxi data. Shell scripts in each folder must be run first to download the data. Currently the database is approximately 20gb representing 140mm rows.
 
 Once the database is created, data can easily be accessed via SQL and [dbplyr](https://dbplyr.tidyverse.org/) queries:
 ```
