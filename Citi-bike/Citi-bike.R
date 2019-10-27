@@ -123,7 +123,7 @@ date.counts %>%
   scale_y_continuous(labels = scales::comma) +
   scale_x_date(date_breaks = "1 year",
                date_labels = "%Y") +
-  labs(title = "Daily number of Citibike rides",
+  labs(title = "Daily count of Citi Bike rides",
        x = "",
        y = "Daily rides") +
   light.theme +

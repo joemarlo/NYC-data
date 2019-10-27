@@ -46,7 +46,7 @@ samp.df <- samp.df %>%
   filter(Tripduration < (60 * 60), #limit to trips under an hour
          Birth.year > 1900) #don't want those 100+ year olds in the dataset
 
-# build three models (note: these are poor models, it's just an exmaple)
+# build three models in memory (note: these are poor models, it's just an exmaple)
 model.lm <- lm(Tripduration ~ Starttime * Birth.year * Gender * Usertype, data = samp.df)
 model.glm <- glm(Tripduration ~ Starttime * Birth.year * Gender * Usertype, data = samp.df, family = poisson)
 model.rf <- ranger(Tripduration ~ Starttime + Birth.year + Gender + Usertype, data = samp.df)
@@ -79,15 +79,15 @@ samp.df %>%
 # parse_model(model.rf)
 
 # test the models on database
-# determine which rows from main dataset to validate against
+# determine which rows from main table to validate against
 samp.size <- 10000
 samp.rows <- sample(n.pop.rows, size = samp.size, replace = FALSE)
 
 # visual comparison of the models on new data
 tbl(conn, "citibike.2019") %>%
   filter(row_number() %in% samp.rows) %>%
-  tidypredict_to_column(model.lm, vars = "LM") %>%
-  tidypredict_to_column(model.glm, vars = "GLM") %>%
+  tidypredict_to_column(model.lm, vars = "LM") %>% # this runs the model on-disk
+  tidypredict_to_column(model.glm, vars = "GLM") %>% # this runs the model on-disk
   select(LM, GLM, Tripduration, Starttime, Birth.year, Gender, Usertype) %>%
   filter(Tripduration < (60 * 60), #limit to trips under an hour
          Birth.year > 1900) %>%
