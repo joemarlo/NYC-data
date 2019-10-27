@@ -5,7 +5,8 @@ library(ranger)
 source("Plots/ggplot-theme.R")
 options(scipen = 999)
 
-# connect to database and read in data to memory --------------------------
+
+# connect to database  ----------------------------------------------------
 
 # establish the connection to the database
 conn <- dbConnect(RSQLite::SQLite(), "NYC.db")
@@ -59,7 +60,8 @@ samp.df %>%
   mutate(LM = predict(model.lm),
          GLM = predict(model.lm),
          RandomForest = model.rf$predictions) %>%
-  gather(key = model.type, value = "Predicted.trip.duration", -c("Tripduration", "Starttime", "Birth.year", "Gender", "Usertype")) %>%
+  gather(key = model.type, value = "Predicted.trip.duration",
+         -c("Tripduration", "Starttime", "Birth.year", "Gender", "Usertype")) %>%
   ggplot(aes(x = Tripduration, y = Predicted.trip.duration, color = Birth.year)) +
   geom_point() +
   geom_abline(slope = 1, intercept = 0) +
@@ -90,7 +92,8 @@ tbl(conn, "citibike.2019") %>%
   filter(Tripduration < (60 * 60), #limit to trips under an hour
          Birth.year > 1900) %>%
   collect() %>%
-  gather(key = model.type, value = "Predicted.trip.duration", -c("Tripduration", "Starttime", "Birth.year", "Gender", "Usertype")) %>%
+  gather(key = model.type, value = "Predicted.trip.duration",
+         -c("Tripduration", "Starttime", "Birth.year", "Gender", "Usertype")) %>%
   ggplot(aes(x = Tripduration, y = Predicted.trip.duration, color = Birth.year)) +
   geom_point() +
   coord_cartesian(xlim = c(0, (60 * 60)),

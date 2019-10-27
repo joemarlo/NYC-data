@@ -34,7 +34,7 @@ bike.trips.df <- tbl(conn, "citibike.2019") %>%
 #             Exits = sum(Exits))
 
 # disconnect from the database
-dbDisconnect(conn)
+# dbDisconnect(conn)
 
 
 # tidy up the data ---------------------------------------------------------------------
@@ -100,6 +100,40 @@ tidybike.df[samp_rows,] %>%
 #        width = 8,
 #        height = 7)
 
+# count number of trips per day, one table at a time
+#  then combine into one dataframe
+#  needs to be a loop b/c it dumps the memory after
+#  summarizing each table
+tables <- dbListTables(conn) %>% grep("citibike*", ., value = TRUE)
+date.counts <- data.frame()
+for (table in tables){
+ tmp <- tbl(conn, table) %>%
+  collect() %>%
+  group_by(Day = date(as_datetime(Starttime))) %>%
+  summarize(n.rides = n())
+ date.counts <- bind_rows(date.counts, tmp)
+}
+
+# plot of daily count of trips by date
+date.counts %>%
+  ggplot(aes(x = Day, y = n.rides, color = n.rides)) +
+  geom_point(alpha = 0.5, shape = 19) +
+  scale_color_continuous(low = "#2b7551",
+                         high = "#2b7551") +
+  scale_y_continuous(labels = scales::comma) +
+  scale_x_date(date_breaks = "1 year",
+               date_labels = "%Y") +
+  labs(title = "Daily number of Citibike rides",
+       x = "",
+       y = "Daily rides") +
+  light.theme +
+  theme(legend.position = "none")
+
+# ggsave(filename = "Plots/Daily_bike_rides.svg",
+#        plot = last_plot(),
+#        device = "svg",
+#        width = 9,
+#        height = 5)
 
 # scratch code ------------------------------------------------------------
 
