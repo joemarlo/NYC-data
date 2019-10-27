@@ -25,6 +25,15 @@ turnstile.df %>%
 turnstile.df <- tbl(conn, "turnstile.2019") %>% collect() 
 ```
 
+## To-do list
+- [x] Build database core
+- [x] Add in Citi Bike data to database
+- [x] Add in Subway data to database
+- [ ] Add in taxi data to database
+- [x] Construct example of modeling on-disk
+- [x] Create example visualizations
+- [ ] Add Central Park weather to database
+
 </br>
 
 ### Visualizations created from the database
