@@ -1,13 +1,8 @@
 # NYC-data
 
-The goal of this project is to pull together a database of the various NYC transportation options to ease and expedite future analyses. Currently, the database is approximately 20gb representing 140mm rows, and can be created using the `Create_database.R` script.
+The goal of this project is to pull together a database of the various NYC transportation options to ease and expedite future analyses. Currently, the database includes Citi Bike and subway data, and is approximately 20gb representing 140mm rows.
 
-`Create_database.R` creates the SQLite database of the Citi Bike, Subway, and (eventually) the Taxi data. Shell scripts in each folder must be run first to download the data. Individual files to clean and analyze the data from the database are in the folders: [Citi-bike](Citi-bike), [Subway-turnstiles](Subway-turnstiles), [Taxi](Taxi):
-
-- `Citi-bike.R`
-- `Subway_turnstiles.R`
-- `Taxi.R`
-
+`Create_database.R` creates the SQLite database of the Citi Bike, subway, and (eventually) taxi trip data. Shell scripts in each folder must be run first to download the data. Individual files to clean and analyze the data from the database are in the folders: [Citi-bike](Citi-bike), [Subway-turnstiles](Subway-turnstiles), [Taxi](Taxi).
 
 Once the database is created, data can easily be accessed via SQL and [dbplyr](https://dbplyr.tidyverse.org/) queries:
 ```
@@ -31,7 +26,9 @@ turnstile.df <- tbl(conn, "turnstile.2019") %>% collect()
 - [x] Add in Citi Bike data to database
 - [x] Add in Subway data to database
 - [ ] Add in taxi data to database
-- [x] Construct example of modeling on-disk
+- [x] Add lat/long information for each subway station
+- [ ] Ensure date time formats are consistent across tables
+- [x] Create example of modeling on-disk
 - [x] Create example visualizations
 - [ ] Add Central Park weather to database
 

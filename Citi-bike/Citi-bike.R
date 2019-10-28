@@ -11,13 +11,6 @@ options(scipen = 999)
 # establish the connection to the database
 conn <- dbConnect(RSQLite::SQLite(), "NYC.db")
 
-# # read in just September data into memory
-# bike.trips.df <- tbl(conn, "citibike.2019.08") %>%
-#   as_tibble() %>%
-#   mutate(Starttime = as_datetime(Starttime),
-#          Stoptime = as_datetime(Stoptime),
-#          Gender = factor(Gender, levels = c("Unknown", "Male", "Female")))
-
 # read in all of 2019 data
 bike.trips.df <- tbl(conn, "citibike.2019") %>%
   collect() %>%
@@ -116,10 +109,10 @@ for (table in tables){
 
 # plot of daily count of trips by date
 date.counts %>%
-  ggplot(aes(x = Day, y = n.rides, color = n.rides)) +
-  geom_point(alpha = 0.5, shape = 19) +
-  scale_color_continuous(low = "#2b7551",
-                         high = "#2b7551") +
+  ggplot(aes(x = Day, y = n.rides)) +
+  geom_point(alpha = 0.5,
+             shape = 19,
+             color = "#2b7551") +
   scale_y_continuous(labels = scales::comma) +
   scale_x_date(date_breaks = "1 year",
                date_labels = "%Y") +
