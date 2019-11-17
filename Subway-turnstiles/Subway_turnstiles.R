@@ -37,7 +37,7 @@ turnstile.df <- tbl(conn, "turnstile.2019") %>%
 #             Exits = sum(Exits))
 
 # disconnect from the database
-dbDisconnect(conn)
+# dbDisconnect(conn)
 
 # helper functions --------------------------------------------------------
 
@@ -82,10 +82,17 @@ hist(turnstile.df$Entries, breaks = breaks, plot = FALSE)$counts
 hist(turnstile.df$Exits, breaks = breaks, plot = FALSE)$counts
 rm(breaks)
 
-#net entries and exits
+# net entries and exits
 scales::percent((sum(turnstile.df$Entries, na.rm = TRUE) -
                  sum(turnstile.df$Exits, na.rm = TRUE)) /
                  sum(turnstile.df$Entries, na.rm = TRUE))
+
+# remove NA rows
+turnstile.df <- na.omit(turnstile.df)
+
+# add lat long from database
+turnstile.df <- turnstile.df %>%
+  left_join(tbl(conn, "station.lat.long"), by = c("Station", "Linename"), copy = TRUE)
 
 # EDA ---------------------------------------------------------------------
 
@@ -129,220 +136,10 @@ turnstile.df %>%
 #        height = 5)
 
 
-# add lat long ------------------------------------------------------------
-
-# core problem is that the turnstile data doesn't have lat long info
-# goal is to merge with a dataset known list of stations with lat long
-# but dataset station names don't match so we need to fuzzy match
-
-#import list of stations and tidy | need this for lat long | save for later use
-stations.latlong.df <- GET("https://data.cityofnewyork.us/api/views/kk4q-3rt2/rows.csv?accessType=DOWNLOAD")
-stations.latlong.df <- content(stations.latlong.df)
-# write_csv(stations.latlong.df, "Subway-turnstiles/Data/stations.latlong.df.csv")
-
-# change names to proper case
-names(stations.latlong.df) <- sapply(names(stations.latlong.df), toproper)
-
-#seperate out the lat/long
-stations.latlong.df <- stations.latlong.df %>%
-  mutate(The_geom = str_remove(The_geom, "POINT [(]") %>% str_remove(., "[)]")) %>%
-  separate(The_geom, into = c("Long", "Lat"), sep = " ") %>%
-  mutate(Lat = as.double(Lat),
-         Long = as.double(Long)) %>%
-  rename(Station = Name) %>%
-  select(Station, Lat, Long, Line)
-
-#check the station names; most station names don't match so need to fuzzy match
-# unique(turnstile.df$Station)
-# unique(stations.latlong.df$Station)
-
-# need to match on station name and line; check line first then match name
-# match subway line letters by splitting apart and checking individually
-# need to clean up stations.latlong.df$Line first
-
-# remove "express" so E doesn't match it
-stations.latlong.df$Line <- str_remove_all(stations.latlong.df$Line, "Express")
-
-# split out the letters from the lines column
-stations.latlong.df$Line <- str_split(stations.latlong.df$Line, "-")
-turnstile.df$Linename <- str_split(turnstile.df$Linename, "")
-
-# make station names lower case so they match better
-stations.latlong.df$Station <- tolower(stations.latlong.df$Station)
-turnstile.df$Station <- tolower(turnstile.df$Station)
-
-# replace ave and avenue with av
-stations.latlong.df$Station <- str_replace_all(stations.latlong.df$Station, " ave"," av")
-stations.latlong.df$Station <- str_replace_all(stations.latlong.df$Station, "ave ","av ")
-turnstile.df$Station <- str_replace_all(turnstile.df$Station, "avenue ","av ")
-turnstile.df$Station <- str_replace_all(turnstile.df$Station, " ave"," av")
-
-# replace street with st
-turnstile.df$Station <- str_replace_all(turnstile.df$Station, " street"," st")
-
-# replace road with rd
-stations.latlong.df$Station <- str_replace_all(stations.latlong.df$Station, " road"," rd")
-turnstile.df$Station <- str_replace_all(turnstile.df$Station, " road"," rd")
-
-# replace place with pl
-turnstile.df$Station <- str_replace_all(turnstile.df$Station, " place"," pl")
-
-# remove "ths" and "rd" after street numbers
-stations.latlong.df$Station[grep("[0-9]th", stations.latlong.df$Station)] <- str_remove_all(stations.latlong.df$Station[grep("[0-9]th", stations.latlong.df$Station)], "th")
-stations.latlong.df$Station[grep("[0-9]rd", stations.latlong.df$Station)] <- str_remove_all(stations.latlong.df$Station[grep("[0-9]rd", stations.latlong.df$Station)], "rd")
-turnstile.df$Station[grep("[0-9]th", turnstile.df$Station)] <- str_remove_all(turnstile.df$Station[grep("[0-9]th", turnstile.df$Station)], "th")
-
-# remove "nd"s 
-stations.latlong.df$Station[grep("[0-9]nd", stations.latlong.df$Station)] <- str_remove_all(stations.latlong.df$Station[grep("[0-9]nd", stations.latlong.df$Station)], "nd")
-
-
-get_new_name <- function(old.name, subway.lines){
-  
-  # function returns a matching station name (plus line, lat, long) from the new lat/long dataset
-  # it first creates a possible list of new stations based on which subway
-  #   lines are matched
-  # then it fuzzy matches the name of the old.name against the list
-  #   of new station names
-  
-  # determine the probability a station matches by comparing the number of lines 
-  # that match (the intersect) to the total amount (the union) of lines
-  match.probs <- sapply(stations.latlong.df$Line, function(new.line) {
-    n.intst <- length(intersect(subway.lines, new.line))
-    n.union <- length(union(subway.lines, new.line))
-    prob <- n.intst / n.union
-    return(prob)
-  })
-  
-  # find the station names that match the best: i.e. include matches that 
-  #  are at least 50% as good as the top match
-  match.stations <- stations.latlong.df[match.probs >= max(match.probs) * 0.5,]
-  
-  # now fuzzy match the station name within this list
-  new.name <- stringsim(old.name, unlist(match.stations$Station), method = "osa") %>% which.max(.) %>% match.stations[.,]
-  
-  return(new.name)
-}
-
-# get only unique pairs of station and lines then get rid of NA line
-station.line.pairs <- turnstile.df[,c("Station", "Linename")][!duplicated(turnstile.df[,c("Station", "Linename")]),]
-station.line.pairs <- station.line.pairs[!is.na(station.line.pairs$Station),]
-
-# apply the get_new_name function over the unique pairs data frame
-station.line.pairs <- lapply(1:nrow(station.line.pairs), function(index) {
-  get_new_name(station.line.pairs$Station[[index]], station.line.pairs$Linename[[index]])
-}) %>%
-  bind_rows() %>%
-  bind_cols(station.line.pairs, .) %>%
-  rename(New.name = Station1,
-         New.line = Line)
-
-# seems to still be some issues. the below 50 didn't match well (about 10% of total stations)
-# 34 st-herald sq
-# 14 st-union sq
-# botanic garden
-# union st
-# 86 st [64]
-# 181 st [132]
-# canal st [156]
-# world trade ct [158]
-# 2 av [249]
-# orchard beach [280]
-# newark hw bmebe [281]
-# harrson [282]
-# journal square [283]
-# grove st [284]
-# exchange pl [285]
-# pavonia [286]
-# city / bus [287]
-# chritopher [288]
-# 9 st [289]
-# 14 st [290]
-# twenty third [291]
-# thirty st [292]
-# [293:299]
-# 181 st [330]
-# 231 st [336]
-# spring [342]
-# astor pl [344]
-# 14 st union sq [345]
-# 23rd [346]
-# 28 st [347]
-# 33 st [348]
-# 51 st [350]
-# 68st hunter [352]
-# 96st [355]
-# 103 [356]
-# 110 [357]
-# 116 [358]
-# 33st rawson [427]
-# 40 st lowery [428]
-# 46 st bliss [429]
-# 61 st woodside [431]
-# flatbush av [467]
-# st george [473]
-# rit manhattan [474]
-# rit roosevelt [475]
-# newark [476]
-
-
-#manually fix some of the big stations
-station.line.pairs[6, 3:6] <- stations.latlong.df[145,] #herald sq
-station.line.pairs[9, 3:6] <- stations.latlong.df[105,] #union sq - 14 st
-station.line.pairs[24, 3:6] <- stations.latlong.df[281,] #botanic
-station.line.pairs[44, 3:6] <- stations.latlong.df[36,] #union st
-station.line.pairs[64, 3:6] <- stations.latlong.df[336,] # 86 st [64]
-station.line.pairs[132, 3:6] <- stations.latlong.df[396,] # 181 st [132]
-station.line.pairs[156, 3:6] <- stations.latlong.df[410,] # canal st [156]
-station.line.pairs[158, 3:6] <- stations.latlong.df[409,] # world trade ct [158]
-# station.line.pairs[249, 3:6] <- stations.latlong.df[,] # 2 av [249] no second ave in the dataset
-station.line.pairs[288, 3:6] <- stations.latlong.df[195,] # christopher [288]
-# station.line.pairs[289, 3:6] <- stations.latlong.df[195,] # 9 st [289] no ninth st in the dataset
-station.line.pairs[290, 3:6] <- stations.latlong.df[439,] # 14 st [290]
-station.line.pairs[291, 3:6] <- stations.latlong.df[96,] # twenty third [291]
-# station.line.pairs[292, 3:6] <- stations.latlong.df[96,]# thirty st [292] no match in the dataset
-station.line.pairs[330, 3:6] <- stations.latlong.df[178,] # 181 st [330]
-station.line.pairs[336, 3:6] <- stations.latlong.df[267,] # 231 st [336]
-station.line.pairs[342, 3:6] <- stations.latlong.df[467,] # spring [342]
-station.line.pairs[344, 3:6] <- stations.latlong.df[1,] # astor pl [344]
-station.line.pairs[345, 3:6] <- stations.latlong.df[105,] # 14 st union sq [345]
-station.line.pairs[346, 3:6] <- stations.latlong.df[92,] # 23rd [346]
-station.line.pairs[347, 3:6] <- stations.latlong.df[200,] # 28 st [347]
-station.line.pairs[348, 3:6] <- stations.latlong.df[32,] # 33 st [348]
-station.line.pairs[350, 3:6] <- stations.latlong.df[85,] # 51 st [350]
-station.line.pairs[352, 3:6] <- stations.latlong.df[102,] # 68st hunter [352]
-station.line.pairs[355, 3:6] <- stations.latlong.df[33,] # 96st [355]
-station.line.pairs[356, 3:6] <- stations.latlong.df[458,] # 103 [356]
-station.line.pairs[357, 3:6] <- stations.latlong.df[450,] # 110 [357]
-station.line.pairs[358, 3:6] <- stations.latlong.df[462,] # 116 [358]
-
-# process to manually look up matches
-# indices <- grep("116", stations.latlong.df$Station)
-# View(stations.latlong.df %>% rowid_to_column() %>% .[indices,], title = "matches")
-# View(station.line.pairs[358,], title = "actual")
-
-# histogram of string sim scores of the station name matches
-station.line.pairs %>%
-  rowwise() %>%
-  mutate(Score = stringsim(Station, New.name)) %>%
-  ggplot(aes(x = Score)) +
-  geom_histogram(color = "white", binwidth = 0.05) +
-  labs(title = "Histogram of the string match scores comparing the final station names",
-       subtitle = "Higher is better; 1 indicates perfect match")
-
-# unlist the new name and line
-station.line.pairs$Linename <- sapply(station.line.pairs$Linename, function(x) unlist(x) %>% paste(., collapse = "-"))
-turnstile.df$Linename <- sapply(turnstile.df$Linename, function(x) unlist(x) %>% paste(., collapse = "-"))
-station.line.pairs$New.name <- sapply(station.line.pairs$New.name, unlist)
-
-# merge with the new data frame to get lat long
-turnstile.clean.df <- left_join(x = turnstile.df, y = station.line.pairs, by = c("Station", "Linename"))
-turnstile.clean.df <- turnstile.clean.df %>% rename(Old.station.name = Station, Station = New.name)
-rm(station.line.pairs)
-
 # visuals -----------------------------------------------------------------
 
 # map of the cumulative monthly ridership for each subway station
-turnstile.clean.df %>%
+turnstile.df %>%
   group_by(Station, Linename, Lat, Long) %>%
   summarize(Monthly.ridership = sum(Entries)) %>%
   ggplot() +
@@ -368,7 +165,7 @@ turnstile.clean.df %>%
 #        height = 6)
 
 # map segmented by commuting hours
-turnstile.clean.df %>%
+turnstile.df %>%
   ungroup() %>%
   select(Date, Time, Station, Lat, Long, Entries, Exits) %>%
   filter(wday(Date) %in% 2:6) %>%
@@ -408,7 +205,7 @@ turnstile.clean.df %>%
 #        height = 11)
 
 #create animated map of ridership hourly
-subway.plot <- turnstile.clean.df %>%
+subway.plot <- turnstile.df %>%
   filter(Time %in% as_hms(paste0(2:20, ":00:00"))) %>% #only retain on the hour times (causes issue with animation)
   mutate(Time = hour(Time),
          id = paste0(Station, "-", Lat, "-", Long)) %>%
@@ -446,16 +243,4 @@ subway.gif <- animate(subway.plot,
 # anim_save(animation = subway.gif,
 #           filename = "Plots/subway_hourly.gif")
 
-
-
-# second option to lat long data: use preprocessed lat long data ------------------------------------
-
-# import list of stations and tidy | need this for lat long
-# note that this dataset is not up to date; doesn't include 2nd ave subway
-github.latlong.df <- read_csv("https://raw.githubusercontent.com/chriswhong/nycturnstiles/master/geocoded.csv", 
-                              col_names = FALSE)
-#rename the columns
-names(github.latlong.df) <- c("Unit", "Booth", "Station", "Lines", "Division", "Lat", "Long")
-#join it with the original turnstile data
-turnstile.clean.df.2 <- left_join(turnstile.df, github.latlong.df[, c("Unit", "Booth", "Lat", "Long")], by = c("Booth", "Unit"))
 
