@@ -4,13 +4,10 @@ library(hms)
 library(lubridate)
 library(DescTools)
 library(stringdist)
-library(parallel)
 library(gganimate)
 library(gifski)
 library(RSQLite)
 source("Plots/ggplot-theme.R")
-
-cpu.cores <- detectCores()
 
 
 # connect to database and read in data to memory --------------------------

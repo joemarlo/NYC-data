@@ -5,7 +5,13 @@ library(lubridate)
 library(DescTools)
 library(stringdist)
 library(RSQLite)
-source("Plots/ggplot-theme.R")
+
+# this script creates a table of the latitude and longitude for each subway
+#  station. The table is saved to the database and can be joined to other tables
+#  by matching the station and linename
+# The lat long info is from the NYC website but the station names do not match the
+#  turnstile data. The two are merged by a combination of string matching the station names and matching
+#  the subway lines plus manually matching approx. 50 remaining station
 
 
 # connect to database and read in data to memory --------------------------
