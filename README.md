@@ -39,6 +39,10 @@ turnstile.df <- tbl(conn, "turnstile.2019") %>% collect()
 </p>
 
 <p align="center">
+<img src="Plots/Minute_bike_rides.svg" width=79%>
+</p>
+
+<p align="center">
 <img src="Plots/Commuting_light.png" width=80%>
 </p>
 

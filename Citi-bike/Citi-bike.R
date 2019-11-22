@@ -128,6 +128,57 @@ date.counts %>%
 #        width = 9,
 #        height = 5)
 
+tables <- dbListTables(conn) %>% grep("citibike*", ., value = TRUE)
+minute.counts <- data.frame()
+for (table in tables) {
+  
+  # collect one year's worth of data
+  this.year <- tbl(conn, table) %>% collect()
+  
+  # count number of days in the year
+  n.days <- n_distinct(date(as_datetime(this.year$Starttime)))
+  
+  # count the number of mean rides per minute
+  tmp <- this.year %>%
+    group_by(Hour = hour(as_datetime(Starttime)),
+             Minute = minute(as_datetime(Starttime))) %>%
+    tally() %>%
+    mutate(n = n / n.days) %>%
+    ungroup() %>%
+    mutate(id = 1:(60 * 24), # add unique identifier for the minute
+           year = table)
+  
+  # build one data frame of all the years
+  minute.counts <- bind_rows(minute.counts, tmp)
+}
+
+# set colors for years
+# year.colors <- seq_gradient_pal(low = "#5670a8",
+#                                 high = "#EE6363",
+#                                 space = "Lab")(seq(0, 1, length = 7))
+year.colors <- c(rep("#bdc1c7", 6), "#2b7551")
+
+# plot of average count of trips by minute
+minute.counts %>%
+  ggplot(aes(x = id, y = n, group = year, color = year)) +
+  geom_line() +
+  scale_color_manual(values = year.colors) +
+  scale_x_continuous(labels = 0:24, breaks = seq(0, 60*24, by = 60)) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = "Count of Citi Bike rides starting every minute",
+       x = "Hour of day",
+       y = "Average number of rides starting each minute") +
+  light.theme +
+  annotate("text", x = 20*60, y = 90,
+           label = 'bold("2019")', parse =TRUE, color = "#2b7551") +
+  theme(legend.position = "none")
+
+# ggsave(filename = "Plots/Minute_bike_rides.svg",
+#        plot = last_plot(),
+#        device = "svg",
+#        width = 9,
+#        height = 5)
+
 # scratch code ------------------------------------------------------------
 
 #bike trips from our station
