@@ -44,7 +44,7 @@ toproper <- function(name) paste0(toupper(substr(name, 1, 1)), tolower(substring
 # # keep only the columns that are important
 # cols.to.keep <- cols.to.keep[cols.to.keep %in% c("Date", "PRCP", "SNWD", "SNOW", "TMAX", "TMIN", "AWND", "WSF2")]
 # CP.weather.df <- CP.weather.df[, cols.to.keep]
-# colnames(CP.weather.df) <- c("Date", "Precipation", "Snow.depth", "Snowfall", "Max.temp", "Min.temp", "Avg.wind.speed", "Gust.speed")
+# colnames(CP.weather.df) <- c("Date", "Precipitation", "Snow.depth", "Snowfall", "Max.temp", "Min.temp", "Avg.wind.speed", "Gust.speed")
 # rm(minmax.dates, cols.to.keep, has.value)
 # 
 # # filter out dates before 2000
@@ -80,7 +80,7 @@ dbWriteTable(
   value = CP.weather.df,
   field.types = c(
     Date = "int",
-    Precipation = "real",
+    Precipitation = "real",
     Snow.depth = "real",
     Snowfall = "real",
     Max.temp = "int",

@@ -1,4 +1,4 @@
-Date,Precipation,Snow.depth,Snowfall,Max.temp,Min.temp,Avg.wind.speed,Gust.speed
+Date,Precipitation,Snow.depth,Snowfall,Max.temp,Min.temp,Avg.wind.speed,Gust.speed
 2000-01-01,0.00,0.0,0.0,50,34,5.8,16.1
 2000-01-02,0.00,0.0,0.0,60,43,4.7,16.1
 2000-01-03,0.00,0.0,0.0,64,51,6.7,15.0
