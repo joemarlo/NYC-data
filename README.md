@@ -27,10 +27,10 @@ turnstile.df <- tbl(conn, "turnstile.2019") %>% collect()
 - [x] Add in Subway data to database
 - [ ] Add in taxi data to database
 - [x] Add lat/long information for each subway station
-- [ ] Ensure date time formats are consistent across tables
+- [x] Ensure date time formats are consistent across tables (note: use as_date() or as_datetime() to convert the values from queries)
 - [x] Create example of modeling on-disk
 - [x] Create example visualizations
-- [ ] Add Central Park weather to database
+- [x] Add Central Park weather to database
 
 ## Visualizations created from the database
 

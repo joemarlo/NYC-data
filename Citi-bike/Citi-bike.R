@@ -102,14 +102,20 @@ date.counts <- data.frame()
 for (table in tables){
  tmp <- tbl(conn, table) %>%
   collect() %>%
-  group_by(Day = date(as_datetime(Starttime))) %>%
+  group_by(Date = date(as_datetime(Starttime))) %>%
   summarize(n.rides = n())
  date.counts <- bind_rows(date.counts, tmp)
 }
 
+# add weather from database
+date.counts <- tbl(conn, "Central.Park.weather") %>%
+  collect() %>%
+  mutate(Date = as_date(Date)) %>%
+  right_join(date.counts, by = "Date")
+
 # plot of daily count of trips by date
 date.counts %>%
-  ggplot(aes(x = Day, y = n.rides)) +
+  ggplot(aes(x = Date, y = n.rides)) +
   geom_point(alpha = 0.5,
              shape = 19,
              color = "#2b7551") +
@@ -127,6 +133,26 @@ date.counts %>%
 #        device = "svg",
 #        width = 9,
 #        height = 5)
+
+# plot of daily count of trips by date and temperature
+date.counts %>%
+  ggplot(aes(x = Date)) +
+  geom_point(aes(y = n.rides),
+             alpha = 0.5,
+             shape = 19,
+             color = "#2b7551") +
+  geom_line(aes(y = Max.temp * 555),
+            color = "black",
+            alpha = 0.7) +
+  scale_y_continuous(labels = scales::comma,
+                     sec.axis = sec_axis(~./555, name = "Maximum temparatute")) +
+  scale_x_date(date_breaks = "1 year",
+               date_labels = "%Y") +
+  labs(title = "Daily count of Citi Bike rides",
+       x = "",
+       y = "Daily rides") +
+  light.theme +
+  theme(legend.position = "none")
 
 tables <- dbListTables(conn) %>% grep("citibike*", ., value = TRUE)
 minute.counts <- data.frame()

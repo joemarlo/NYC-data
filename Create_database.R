@@ -264,8 +264,8 @@ sapply(years.to.import, function(year) {
       overwrite = TRUE,
       field.types = c(
         Tripduration = "int",
-        Starttime = "datetime",
-        Stoptime = "datetime",
+        Starttime = "int",
+        Stoptime = "int",
         Start.station.id = "int",
         Start.station.name = "text",
         Start.station.latitude = "real",
