@@ -107,12 +107,6 @@ for (table in tables){
  date.counts <- bind_rows(date.counts, tmp)
 }
 
-# add weather from database
-date.counts <- tbl(conn, "Central.Park.weather") %>%
-  collect() %>%
-  mutate(Date = as_date(Date)) %>%
-  right_join(date.counts, by = "Date")
-
 # plot of daily count of trips by date
 date.counts %>%
   ggplot(aes(x = Date, y = n.rides)) +
@@ -134,25 +128,35 @@ date.counts %>%
 #        width = 9,
 #        height = 5)
 
+
 # plot of daily count of trips by date and temperature
-date.counts %>%
+# add weather from database
+tbl(conn, "Central.Park.weather") %>%
+  collect() %>%
+  mutate(Date = as_date(Date),
+         Max.temp.avg = zoo::rollapply(Max.temp, width = 30, mean, align = 'center', fill = NA),
+         Min.temp.avg = zoo::rollapply(Min.temp, width = 30, mean, align = 'center', fill = NA)) %>%
+  right_join(date.counts, by = "Date") %>%
   ggplot(aes(x = Date)) +
   geom_point(aes(y = n.rides),
-             alpha = 0.5,
+             alpha = 0.4,
              shape = 19,
              color = "#2b7551") +
-  geom_line(aes(y = Max.temp * 555),
-            color = "black",
-            alpha = 0.7) +
+  geom_ribbon(aes(ymax = Max.temp.avg*700,
+                  ymin = Min.temp.avg*700),
+              fill = "grey30",
+              alpha = 0.5) +
   scale_y_continuous(labels = scales::comma,
-                     sec.axis = sec_axis(~./555, name = "Maximum temparatute")) +
+                     sec.axis = sec_axis(~./700, name = "Temperature range")) +
   scale_x_date(date_breaks = "1 year",
                date_labels = "%Y") +
   labs(title = "Daily count of Citi Bike rides",
        x = "",
        y = "Daily rides") +
   light.theme +
-  theme(legend.position = "none")
+  theme(legend.position = "none",
+        panel.grid.major.y = element_line(color = NA))
+
 
 tables <- dbListTables(conn) %>% grep("citibike*", ., value = TRUE)
 minute.counts <- data.frame()
