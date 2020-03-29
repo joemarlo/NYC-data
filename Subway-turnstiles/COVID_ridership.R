@@ -76,7 +76,7 @@ turnstile.df %>%
   scale_y_continuous(labels = scales::comma) +
   scale_x_date(date_breaks = "1 week", date_labels = "%m-%d") +
   geom_line() +
-  labs(title = 'Daily ridership drops significantly in March',
+  labs(title = 'Daily ridership drops significantly in March 2020',
        x = NULL,
        y = 'Daily ridership') +
   light.theme
