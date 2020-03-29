@@ -14,8 +14,10 @@ turnstile.df <- tbl(conn, "turnstile.2020") %>%
   mutate(Date = as.Date(Date, origin = "1970-01-01"),
          Time = as_hms(Time))
 
+
+
 # disconnect from the database
-dbDisconnect(conn)
+# dbDisconnect(conn)
 
 
 # data clean up-------------------------------------------------------------------------
@@ -65,7 +67,6 @@ turnstile.df <- na.omit(turnstile.df)
 
 
 # Plots -------------------------------------------------------------------
-turnstile.df
 
 # daily ridership
 turnstile.df %>%
@@ -75,14 +76,61 @@ turnstile.df %>%
   ggplot(aes(x = Date, y = Daily.ridership)) +
   scale_y_continuous(labels = scales::comma) +
   scale_x_date(date_breaks = "1 week", date_labels = "%m-%d") +
-  geom_line() +
-  labs(title = 'Daily ridership drops significantly in March 2020',
+  geom_line(color = '#2b7551') +
+  geom_point(color = '#2b7551') +
+  labs(title = 'Daily subway ridership drops significantly in March 2020',
        x = NULL,
-       y = 'Daily ridership') +
-  light.theme
+       y = 'Daily ridership',
+       caption = 'Data: MTA turnstiles\nmarlo.works') +
+  light.theme +
+  theme(plot.caption = element_text(face = "italic",
+                                    size = 6,
+                                    color = 'grey50'))
 
 ggsave('Plots/COVID_ridership.svg',
        device = 'svg',
        width = 9,
        height = 5)
 
+
+# all years ---------------------------------------------------------------
+
+# read all daily ridership into memory
+turnstile.df <- c()
+for (i in dbListTables(conn)) {
+  turnstile.df <- tbl(conn, i) %>%
+    filter(Desc == "REGULAR" | Desc == "RECOVR AUD") %>% 
+    # calc entries by booth & SCP
+    group_by(Booth, SCP) %>%
+    mutate(Entries = Entries - lag(Entries)) %>% 
+    ungroup() %>% 
+    # trim outliers
+    filter(Entries > 0,
+           Entries <= 100000) %>% 
+    group_by(Date) %>%
+    summarize(Daily.ridership = sum(Entries)) %>% 
+    select(Date, Daily.ridership) %>%
+    collect() %>%
+    mutate(Date = as.Date(Date, origin = "1970-01-01")) %>%
+    na.omit() %>% 
+    bind_rows(turnstile.df, .)
+  gc()
+}
+
+# daily ridership
+turnstile.df %>%
+  # remove outliers
+  filter(Daily.ridership < 30000000) %>% 
+  ggplot(aes(x = Date, y = Daily.ridership)) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_x_date(date_breaks = "1 week", date_labels = "%m-%d") +
+  geom_line() +
+  labs(title = 'Daily ridership drops significantly in March 2020',
+       x = NULL,
+       y = 'Daily ridership') +
+  light.theme
+
+ggsave('Plots/COVID_ridership_full.svg',
+       device = 'svg',
+       width = 9,
+       height = 5)
