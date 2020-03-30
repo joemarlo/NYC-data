@@ -105,6 +105,7 @@ for (table in tables){
   group_by(Date = date(as_datetime(Starttime))) %>%
   summarize(n.rides = n())
  date.counts <- bind_rows(date.counts, tmp)
+ gc()
 }
 
 # plot of daily count of trips by date

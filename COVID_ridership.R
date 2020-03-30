@@ -1,6 +1,7 @@
 library(tidyverse)
 library(hms)
 library(lubridate)
+library(RSQLite)
 source('Plots/ggplot-theme.R')
 
 # connect to database and read in data to memory --------------------------
@@ -134,3 +135,22 @@ ggsave('Plots/COVID_ridership_full.svg',
        device = 'svg',
        width = 9,
        height = 5)
+
+
+# citibike ----------------------------------------------------------------
+
+# read in all of 2019:2020 data
+bike.trips.df <- dbGetQuery(conn,
+                            'SELECT *
+                            FROM "citibike.2019"
+                            
+                            UNION
+                            
+                            SELECT *
+                            FROM "citibike.2020"') %>%
+  collect() %>%
+  mutate(
+    Starttime = as_datetime(Starttime),
+    Stoptime = as_datetime(Stoptime),
+    Gender = factor(Gender, levels = c("Unknown", "Male", "Female"))
+  )

@@ -238,7 +238,7 @@ read_citibike_files <- function(year) {
 
 # read in the citibike files by month, cleanup, then append to the database
 # final result is a database with tables for each year
-years.to.import <- 2013:2019
+years.to.import <- 2013:2020
 sapply(years.to.import, function(year) {
   # read in the files
   df <- read_citibike_files(year = year)
