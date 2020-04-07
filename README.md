@@ -21,8 +21,8 @@ turnstile.df %>%
 turnstile.df <- tbl(conn, "turnstile.2019") %>% collect() 
 ```
 
-## Analyses
-- [COVID impact](COVID-impact)
+## Analyses utilizing the database
+- [Impact of COVID on transportation](Analyses/COVID-impact)
   - [blog post](http://marlo.works/posts/covid-impact/)
 
 ## To-do list
