@@ -21,6 +21,10 @@ turnstile.df %>%
 turnstile.df <- tbl(conn, "turnstile.2019") %>% collect() 
 ```
 
+## Analyses
+- [COVID impact](COVID-impact)
+  - [blog post](http://marlo.works/posts/covid-impact/)
+
 ## To-do list
 - [x] Build database core
 - [x] Add in Citi Bike data to database
