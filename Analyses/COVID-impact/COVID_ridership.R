@@ -10,7 +10,7 @@ source('Plots/ggplot-theme.R')
 conn <- dbConnect(RSQLite::SQLite(), "NYC.db")
 
 # read in just September data into memory
-turnstile.df <- tbl(conn, "turnstile.2020") %>%
+turnstile.df <- tbl(conn, "turnstile.2019") %>%
   collect() %>%
   mutate(Date = as.Date(Date, origin = "1970-01-01"),
          Time = as_hms(Time))
@@ -69,7 +69,7 @@ turnstile.df <- na.omit(turnstile.df)
 
 # daily ridership
 summ.ts <- turnstile.df %>%
-  filter(Date >= as.Date('2020-01-01')) %>% 
+  filter(Date >= as.Date('2020-01-01')) %>%
   group_by(Date) %>%
   summarize(Daily.ridership = sum(Entries)) %>% 
   rename(date = Date,
@@ -121,10 +121,11 @@ for (i in tables) {
   gc()
 }
 
+
 # daily ridership
 turnstile.df %>%
   # remove outliers
-  filter(Daily.ridership < 30000000) %>% 
+  filter(Daily.ridership < 30000000) %>%
   ggplot(aes(x = Date, y = Daily.ridership)) +
   scale_y_continuous(labels = scales::comma) +
   scale_x_date(date_breaks = "1 week", date_labels = "%m-%d") +
@@ -134,10 +135,28 @@ turnstile.df %>%
        y = 'Daily ridership') +
   light.theme
 
-# ggsave('Plots/COVID_ridership_full.svg',
-#        device = 'svg',
-#        width = 9,
-#        height = 5)
+# week of	2019-01-05 wasn't reported until 2019-01-12
+# tibble(Date = seq(as.Date("2019-01-05"), as.Date("2019-01-12"), by = 1)) %>% 
+#   mutate(Daily.ridership = pull(turnstile.df[turnstile.df$Date == as.Date("2019-01-12"), 'Daily.ridership']) / 8) %>% 
+#   bind_rows(turnstile.df %>% filter(Date != as.Date("2019-01-12"))) %>% 
+#   arrange(Date)
+
+# remove outlier week and non-Jan-March dates
+turnstile.df <- turnstile.df %>% 
+  filter(Date != as.Date("2019-01-12"),
+         month(Date) %in% 1:3) %>% 
+  mutate(Month.Day = paste0(month(Date), '-', day(Date)))
+
+# convert ridership to two column: one for 2019 and one for 2020
+summ.ts <- turnstile.df %>% 
+  filter(Date >= as.Date('2020-01-01')) %>% 
+  left_join(
+    turnstile.df %>% 
+      filter(Date <= as.Date('2020-01-01')) %>% 
+      select(-Date),
+    by = "Month.Day"
+    ) %>% 
+  select(date = Date, subway_2020 = Daily.ridership.x, subway_2019 = Daily.ridership.y)
 
 
 # citibike ----------------------------------------------------------------
@@ -160,13 +179,37 @@ bike.trips.df <- bind_rows(
     )
 )
 
-# daily ridership
+
+# 2019+2020 daily ridership
 summ.bikes <- bike.trips.df %>%
   mutate(Starttime = as.Date(Starttime)) %>% 
-  filter(Starttime >= as.Date('2020-01-01')) %>% 
+  filter(Starttime >= as.Date('2019-01-01')) %>% 
   count(Starttime) %>%
   rename(date = Starttime,
-         bike_count = n)
+         bike_count = n) %>% 
+  mutate(Month.Day = paste0(month(date), '-', day(date)))
+
+
+# convert ridership to two column: one for 2019 and one for 2020
+summ.bikes <- summ.bikes %>% 
+  filter(date >= as.Date('2020-01-01')) %>% 
+  left_join(
+    summ.bikes %>% 
+      filter(date <= as.Date('2020-01-01')) %>% 
+      select(-date),
+    by = "Month.Day"
+  ) %>% 
+  select(date, bike_2020 = bike_count.x, bike_2019 = bike_count.y)
+
+
+
+# daily ridership
+# summ.bikes <- bike.trips.df %>%
+#   mutate(Starttime = as.Date(Starttime)) %>% 
+#   filter(Starttime >= as.Date('2020-01-01')) %>% 
+#   count(Starttime) %>%
+#   rename(date = Starttime,
+#          bike_count = n)
 
 # write out the file
 # left_join(summ.ts, summ.bikes) %>% 
@@ -179,7 +222,12 @@ summ.bikes <- bike.trips.df %>%
 
 # fix unemp data ----------------------------------------------------------
 
-unemployment <- read_csv("~/Dropbox/Data/Projects/blog/static/d3/covid-impact/data/unemployment.csv")
+# library(tidyquant)
+
+unemployment <- tidyquant::tq_get('ICSA', 
+                                  get = "economic.data", 
+                                  from = "2020-01-01") %>% 
+  rename(ICSA = price)
 
 # single file
 # unemployment %>% 
@@ -191,10 +239,6 @@ unemployment <- read_csv("~/Dropbox/Data/Projects/blog/static/d3/covid-impact/da
 #          text = format(DATE, "%b %d")) %>% 
 #   write_csv('unemp.csv')
 
-# all data
-unemployment <- unemployment %>% 
-  arrange(DATE) %>% 
-  rename(date = DATE)
 
 # unemployment %>% 
 #   right_join(left_join(summ.ts, summ.bikes)) %>% 
@@ -208,7 +252,7 @@ unemployment <- unemployment %>%
 
 # fix flight data ---------------------------------------------------------
 
-flights <- read_csv("~/Dropbox/Data/Projects/blog/static/d3/covid-impact/data/number-of-commercial-fli.csv") %>% 
+flights <- read_csv("Analyses/COVID-impact/number-of-commercial-fli.csv") %>% 
   select(date = DateTime, 
          flights = `Number of flights`)
 
@@ -247,67 +291,14 @@ summ.ts %>%
   left_join(summ.bikes) %>% 
   left_join(unemployment) %>% 
   left_join(flights) %>% 
-  mutate(value = value / 1e6, 
-         bike_count = bike_count / 1e3,
+  mutate(subway_2020 = subway_2020 / 1e6, 
+         subway_2019 = subway_2019 / 1e6,
+         bike_2020 = bike_2020 / 1e3,
+         bike_2019 = bike_2019 / 1e3,
          ICSA = ICSA / 1e6,
          flights = flights / 1e3,
          text = format(date, "%b %d")) %>% 
-  # mutate_all(as.character) %>% 
-  # mutate_all(replace_na, replace = 0) %>% 
-  write_csv('sub_citi_unemp_flights.csv')
+  write_csv('Analyses/COVID-impact/sub_citi_unemp_flights.csv')
 
 
-
-# 2019 + 2020 -------------------------------------------------------------
-
-
-# dates to filter based on SQL date format
-dates.to.keep <- tibble(Date = 17857:20000) %>% 
-  mutate(Formatted = as.Date(Date, origin = "1970-01-01")) %>% 
-  filter(month(Formatted) %in% 1:4,
-         year(Formatted) %in% 2019:2020) %>% 
-  pull(Date)
-
-
-# read all daily ridership into memory for the first 4 months of 2019 and 2020
-turnstile.df <- c()
-tables <- c("turnstile.2019", "turnstile.2020") # dbListTables(conn) %>% str_subset("turnstile*")
-for (i in tables) {
-  turnstile.df <- tbl(conn, i) %>%
-    filter(Desc == "REGULAR" | Desc == "RECOVR AUD",
-           Date %in% dates.to.keep) %>% 
-    # calc entries by booth & SCP
-    group_by(Booth, SCP) %>%
-    mutate(Entries = Entries - lag(Entries)) %>% 
-    ungroup() %>% 
-    # trim outliers
-    filter(Entries > 0,
-           Entries <= 100000) %>% 
-    group_by(Date) %>%
-    summarize(Daily.ridership = sum(Entries)) %>% 
-    select(Date, Daily.ridership) %>%
-    collect() %>%
-    mutate(Date = as.Date(Date, origin = "1970-01-01")) %>%
-    na.omit() %>% 
-    bind_rows(turnstile.df, .)
-  gc()
-}
-
-turnstile.df %>%
-  mutate(Year = as.factor(year(Date)),
-         Date = as.Date(paste0(month(Date), "-", day(Date)), format = "%m-%d")) %>% 
-  # remove outliers
-  filter(Daily.ridership < 30000000) %>% 
-  ggplot(aes(x = Date, y = Daily.ridership, group = Year, color = Year, alpha = Year)) +
-  geom_line() +
-  geom_point() +
-  scale_alpha_manual(values = c(0.3, 1)) +
-  scale_color_manual(values = c("grey70", "grey40")) +
-  scale_y_continuous(labels = scales::comma) +
-  scale_x_date(date_breaks = "1 week", date_labels = "%m-%d") +
-  labs(title = 'Daily ridership drops significantly in March 2020',
-       x = NULL,
-       y = 'Daily ridership') +
-  light.theme +
-  theme(legend.title = element_blank())
 
