@@ -152,11 +152,12 @@ summ.ts <- turnstile.df %>%
   filter(Date >= as.Date('2020-01-01')) %>% 
   left_join(
     turnstile.df %>% 
-      filter(Date <= as.Date('2020-01-01')) %>% 
+      filter(Date < as.Date('2020-01-01')) %>% 
       select(-Date),
     by = "Month.Day"
     ) %>% 
-  select(date = Date, subway_2020 = Daily.ridership.x, subway_2019 = Daily.ridership.y)
+  select(date = Date, subway_2020 = Daily.ridership.x, subway_2019 = Daily.ridership.y) %>% 
+  mutate(subway_2019 = lead(subway_2019, n = 2)) # move 2019 data two days forward to match weekdays
 
 
 # citibike ----------------------------------------------------------------
@@ -190,16 +191,31 @@ summ.bikes <- bike.trips.df %>%
   mutate(Month.Day = paste0(month(date), '-', day(date)))
 
 
-# convert ridership to two column: one for 2019 and one for 2020
+# temp soluiation to keep 2019 data fthrough march
 summ.bikes <- summ.bikes %>% 
-  filter(date >= as.Date('2020-01-01')) %>% 
-  left_join(
+  filter(date >= as.Date('2020-01-01')) %>%
+  select(-date) %>% 
+  right_join(
     summ.bikes %>% 
-      filter(date <= as.Date('2020-01-01')) %>% 
-      select(-date),
+      filter(date >= as.Date('2019-01-01'),
+             date < as.Date('2019-03-31')) %>% 
+      mutate(date = as.Date(paste0("2020","-", Month.Day))),
     by = "Month.Day"
   ) %>% 
-  select(date, bike_2020 = bike_count.x, bike_2019 = bike_count.y)
+  select(date, bike_2020 = bike_count.x, bike_2019 = bike_count.y) %>% 
+  mutate(bike_2019 = lead(bike_2019, n = 2)) # move 2019 data two days forward to match weekdays
+
+# convert ridership to two column: one for 2019 and one for 2020
+# summ.bikes <- summ.bikes %>% 
+#   filter(date >= as.Date('2020-01-01')) %>% 
+#   left_join(
+#     summ.bikes %>% 
+#       filter(date < as.Date('2020-01-01')) %>% 
+#       select(-date),
+#     by = "Month.Day"
+#   ) %>% 
+#   select(date, bike_2020 = bike_count.x, bike_2019 = bike_count.y) %>% 
+#   mutate(bike_2019 = lag(bike_2019, n = 2)) # move 2019 data two days forward to match weekdays
 
 
 
