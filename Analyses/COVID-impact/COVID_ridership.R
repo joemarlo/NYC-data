@@ -18,6 +18,12 @@ turnstile.df <- tbl(conn, "turnstile.2019") %>%
 # disconnect from the database
 # dbDisconnect(conn)
 
+# plot range for d3 axis
+max.date <- as.Date("2020-04-01")
+min.date <- as.Date("2020-01-01")
+max.date.2019 <- as.Date("2019-04-01")
+min.date.2019 <- as.Date("2019-01-01")
+
 
 # data clean up-------------------------------------------------------------------------
 
@@ -136,28 +142,30 @@ turnstile.df %>%
   light.theme
 
 # week of	2019-01-05 wasn't reported until 2019-01-12
-# tibble(Date = seq(as.Date("2019-01-05"), as.Date("2019-01-12"), by = 1)) %>% 
-#   mutate(Daily.ridership = pull(turnstile.df[turnstile.df$Date == as.Date("2019-01-12"), 'Daily.ridership']) / 8) %>% 
-#   bind_rows(turnstile.df %>% filter(Date != as.Date("2019-01-12"))) %>% 
+# tibble(Date = seq(as.Date("2019-01-05"), as.Date("2019-01-12"), by = 1)) %>%
+#   mutate(Daily.ridership = pull(turnstile.df[turnstile.df$Date == as.Date("2019-01-12"), 'Daily.ridership']) / 8) %>%
+#   bind_rows(turnstile.df %>% filter(Date != as.Date("2019-01-12"))) %>%
 #   arrange(Date)
 
 # remove outlier week and non-Jan-March dates
 turnstile.df <- turnstile.df %>% 
   filter(Date != as.Date("2019-01-12"),
-         month(Date) %in% 1:3) %>% 
+         Date %in% seq(min.date.2019, max.date.2019 + 2, by = 1) | 
+           Date %in% seq(min.date, max.date, by = 1)) %>% 
   mutate(Month.Day = paste0(month(Date), '-', day(Date)))
 
 # convert ridership to two column: one for 2019 and one for 2020
 summ.ts <- turnstile.df %>% 
-  filter(Date >= as.Date('2020-01-01')) %>% 
+  filter(Date >= min.date) %>% 
   left_join(
     turnstile.df %>% 
-      filter(Date <= as.Date('2020-01-01')) %>% 
-      select(-Date),
+      filter(Date < min.date) %>% 
+      select(-Date) %>% 
+      # move 2019 data two days forward to match weekdays
+      mutate(Daily.ridership  = lead(Daily.ridership , n = 2)),
     by = "Month.Day"
     ) %>% 
   select(date = Date, subway_2020 = Daily.ridership.x, subway_2019 = Daily.ridership.y)
-
 
 # citibike ----------------------------------------------------------------
 
@@ -183,7 +191,7 @@ bike.trips.df <- bind_rows(
 # 2019+2020 daily ridership
 summ.bikes <- bike.trips.df %>%
   mutate(Starttime = as.Date(Starttime)) %>% 
-  filter(Starttime >= as.Date('2019-01-01')) %>% 
+  filter(Starttime >= min.date.2019) %>% 
   count(Starttime) %>%
   rename(date = Starttime,
          bike_count = n) %>% 
@@ -192,42 +200,59 @@ summ.bikes <- bike.trips.df %>%
 
 # convert ridership to two column: one for 2019 and one for 2020
 summ.bikes <- summ.bikes %>% 
-  filter(date >= as.Date('2020-01-01')) %>% 
+  filter(date >= min.date) %>% 
   left_join(
     summ.bikes %>% 
-      filter(date <= as.Date('2020-01-01')) %>% 
+      filter(date <= min.date) %>% 
       select(-date),
+    # move 2019 data two days forward to match weekdays
+    mutate(bike_count  = lead(bike_count , n = 2)),
     by = "Month.Day"
   ) %>% 
   select(date, bike_2020 = bike_count.x, bike_2019 = bike_count.y)
 
 
+## interim fix until march citibike data is avail
+summ.bikes <- summ.bikes %>% 
+  filter(date %in% seq(min.date.2019, max.date.2019, by = 1)) %>% 
+  left_join(
+    summ.bikes %>% 
+      filter(date >= min.date) %>% 
+      select(-date),
+    by = "Month.Day"
+  ) %>% 
+  select(date, bike_2020 = bike_count.y, bike_2019 = bike_count.x) %>% 
+  mutate(date = as.Date(paste0("2020-", month(date), "-", day(date))))
 
-# daily ridership
-# summ.bikes <- bike.trips.df %>%
-#   mutate(Starttime = as.Date(Starttime)) %>% 
-#   filter(Starttime >= as.Date('2020-01-01')) %>% 
-#   count(Starttime) %>%
-#   rename(date = Starttime,
-#          bike_count = n)
-
-# write out the file
-# left_join(summ.ts, summ.bikes) %>% 
-#   mutate(value = value / 1e6, 
-#          bike_count = bike_count / 1e3,
-#          text = format(date, "%b %d")) %>% 
-#   write_csv('subway_citibike.csv')
-  
 
 
 # fix unemp data ----------------------------------------------------------
 
-# library(tidyquant)
-
+# read in the data from the StL Fed via tidyquant
 unemployment <- tidyquant::tq_get('ICSA', 
                                   get = "economic.data", 
-                                  from = "2020-01-01") %>% 
-  rename(ICSA = price)
+                                  from = "2019-01-01") %>% 
+  rename(ICSA = price) %>% 
+  full_join(tibble(date = seq(min.date.2019, max.date, by = 1))) %>% 
+  arrange(date) %>% 
+  mutate(Month.Day = paste0(month(date), '-', day(date)))
+
+
+# convert ridership to two column: one for 2019 and one for 2020
+unemployment <- unemployment %>% 
+  filter(date %in% seq(min.date, max.date, by = 1)) %>% 
+  left_join(
+    unemployment %>% 
+      filter(date %in% seq(min.date.2019, max.date.2019, by = 1)) %>%
+      select(-date),
+    by = "Month.Day"
+  ) %>% 
+  select(date, ICSA_2020 = ICSA.x, ICSA_2019 = ICSA.y) %>% 
+  mutate(ICSA_20_exists = !is.na(ICSA_2020),
+         ICSA_19_exists = !is.na(ICSA_2019),
+         ICSA_2020 = zoo::na.approx(ICSA_2020, na.rm = FALSE),
+         ICSA_2019 = zoo::na.approx(ICSA_2019, na.rm = FALSE))
+
 
 # single file
 # unemployment %>% 
@@ -238,15 +263,6 @@ unemployment <- tidyquant::tq_get('ICSA',
 #   mutate(ICSA = ICSA / 1e5,
 #          text = format(DATE, "%b %d")) %>% 
 #   write_csv('unemp.csv')
-
-
-# unemployment %>% 
-#   right_join(left_join(summ.ts, summ.bikes)) %>% 
-#   mutate(value = value / 1e6, 
-#          bike_count = bike_count / 1e3,
-#          ICSA = ICSA / 1e6,
-#          text = format(date, "%b %d")) %>% 
-#   write_csv('subway_citi_unemp.csv')
 
 
 
@@ -290,6 +306,23 @@ g.trends <- read_csv('Analyses/COVID-impact/google_trends.csv') %>%
          workplaces = 'Workplaces')
 
 
+# combine all data and write out ------------------------------------------
+
+# gather the data to one data frame
+summ.ts %>% 
+  left_join(summ.bikes) %>% 
+  left_join(unemployment) %>% 
+  left_join(flights) %>% 
+  left_join(g.trends) %>% 
+  mutate(subway_2020 = subway_2020 / 1e6, 
+         subway_2019 = subway_2019 / 1e6,
+         bike_2020 = bike_2020 / 1e3,
+         bike_2019 = bike_2019 / 1e3,
+         ICSA_2020 = ICSA_2020 / 1e6,
+         ICSA_2019 = ICSA_2019 / 1e6,
+         flights = flights / 1e3,
+         text = format(date, "%b %d")) %>% 
+  write_csv('Analyses/COVID-impact/sub_citi_unemp_flights.csv')
 
 # 311 data ----------------------------------------------------------------
 
@@ -331,7 +364,6 @@ top.cats.by.change <- tibble(
     'Rodent',
     'Street condition',
     'Lost property',
-    'Panhandling',
     'School maintenance',
     'Taxi complaint',
     'Derelict bicycle'
@@ -357,18 +389,18 @@ summ.311 <- map_dfc(summ.311, function(tbl){
     str_replace_all(" ", "_")
   
   wide.tbl <- tbl %>% 
-    filter(date >= as.Date('2020-01-01'),
-           date <= as.Date('2020-03-31')) %>% 
+    filter(date >= min.date,
+           date <= max.date) %>% 
     # ensure all dates are included
-    full_join(tibble(date = seq(as.Date("2020-01-01"), 
-                                as.Date("2020-03-31"), 
+    full_join(tibble(date = seq(min.date, 
+                                max.date, 
                                 by = 1))) %>% 
     replace_na(replace = list(n = 0)) %>% 
     mutate(Month.Day = paste0(month(date), "-", day(date))) %>% 
     left_join(
       tbl %>% 
-        filter(date >= as.Date('2019-01-01'),
-               date <= as.Date('2019-04-02')) %>% 
+        filter(date >= min.date.2019,
+               date <= max.date.2019 + 2) %>% 
         select(year, n.y = n, Month.Day) %>% 
         mutate(n = lead(n.y, n = 2)) %>% 
         select(-n.y), # move 2019 data two days forward to match weekdays
@@ -402,33 +434,6 @@ clean.names <- str_replace_all(no.year.names, "_", " ")
 paste0('<a onclick="update311(\'', no.year.names, "'); changeText311('", clean.names, "')\">", clean.names, "</a>") %>% 
   writeLines()
 
-# combine all data and write out ------------------------------------------
-
-# interpolate the unemployment data
-unemployment <- unemployment %>% 
-  # add random data as filler for days missing
-  full_join(tibble(date = seq(as.Date("2020-01-04"), as.Date("2020-03-28"), by = 1))) %>% 
-  arrange(date) %>% 
-  mutate(ICSA_exists = !is.na(ICSA),
-         ICSA = approx(x = date, y = ICSA, n = n())$y)
-  
-
-# gather the data to one data frame
-summ.ts %>% 
-  filter(date >= as.Date("2020-01-01"),
-         date <= as.Date("2020-03-31")) %>% 
-  left_join(summ.bikes) %>% 
-  left_join(unemployment) %>% 
-  left_join(flights) %>% 
-  left_join(g.trends) %>% 
-  mutate(subway_2020 = subway_2020 / 1e6, 
-         subway_2019 = subway_2019 / 1e6,
-         bike_2020 = bike_2020 / 1e3,
-         bike_2019 = bike_2019 / 1e3,
-         ICSA = ICSA / 1e6,
-         flights = flights / 1e3,
-         text = format(date, "%b %d")) %>% 
-  write_csv('Analyses/COVID-impact/sub_citi_unemp_flights.csv')
 
 
 
