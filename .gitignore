@@ -3,6 +3,7 @@
 .RData
 .Ruserdata
 
+Analyses/COVID-impact/*.csv
 Citi-bike/Data/*.csv
 Subway-turnstiles/Data/turnstile*.txt
 Taxi/Data/*.csv

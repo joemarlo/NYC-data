@@ -152,12 +152,11 @@ summ.ts <- turnstile.df %>%
   filter(Date >= as.Date('2020-01-01')) %>% 
   left_join(
     turnstile.df %>% 
-      filter(Date < as.Date('2020-01-01')) %>% 
+      filter(Date <= as.Date('2020-01-01')) %>% 
       select(-Date),
     by = "Month.Day"
     ) %>% 
-  select(date = Date, subway_2020 = Daily.ridership.x, subway_2019 = Daily.ridership.y) %>% 
-  mutate(subway_2019 = lead(subway_2019, n = 2)) # move 2019 data two days forward to match weekdays
+  select(date = Date, subway_2020 = Daily.ridership.x, subway_2019 = Daily.ridership.y)
 
 
 # citibike ----------------------------------------------------------------
@@ -191,31 +190,16 @@ summ.bikes <- bike.trips.df %>%
   mutate(Month.Day = paste0(month(date), '-', day(date)))
 
 
-# temp soluiation to keep 2019 data fthrough march
+# convert ridership to two column: one for 2019 and one for 2020
 summ.bikes <- summ.bikes %>% 
-  filter(date >= as.Date('2020-01-01')) %>%
-  select(-date) %>% 
-  right_join(
+  filter(date >= as.Date('2020-01-01')) %>% 
+  left_join(
     summ.bikes %>% 
-      filter(date >= as.Date('2019-01-01'),
-             date < as.Date('2019-03-31')) %>% 
-      mutate(date = as.Date(paste0("2020","-", Month.Day))),
+      filter(date <= as.Date('2020-01-01')) %>% 
+      select(-date),
     by = "Month.Day"
   ) %>% 
-  select(date, bike_2020 = bike_count.x, bike_2019 = bike_count.y) %>% 
-  mutate(bike_2019 = lead(bike_2019, n = 2)) # move 2019 data two days forward to match weekdays
-
-# convert ridership to two column: one for 2019 and one for 2020
-# summ.bikes <- summ.bikes %>% 
-#   filter(date >= as.Date('2020-01-01')) %>% 
-#   left_join(
-#     summ.bikes %>% 
-#       filter(date < as.Date('2020-01-01')) %>% 
-#       select(-date),
-#     by = "Month.Day"
-#   ) %>% 
-#   select(date, bike_2020 = bike_count.x, bike_2019 = bike_count.y) %>% 
-#   mutate(bike_2019 = lag(bike_2019, n = 2)) # move 2019 data two days forward to match weekdays
+  select(date, bike_2020 = bike_count.x, bike_2019 = bike_count.y)
 
 
 
@@ -288,6 +272,135 @@ flights <- read_csv("Analyses/COVID-impact/number-of-commercial-fli.csv") %>%
 #   write_csv('sub_citi_unemp_flights.csv')
 
 
+# google location data ----------------------------------------------------
+
+if (!file.exists("Analyses/COVID-impact/google_trends.csv")) {
+  read_tsv("https://github.com/nacnudus/google-location-coronavirus/raw/master/2020-03-29-country.tsv") %>%
+    filter(country_code == 'US',
+           type == 'country') %>%
+    write_csv("Analyses/COVID-impact/google_trends.csv")
+}
+g.trends <- read_csv('Analyses/COVID-impact/google_trends.csv') %>% 
+  select(date, trend, category) %>% 
+  pivot_wider(names_from = 'category', values_from = 'trend') %>% 
+  rename(retail_rec = 'Retail & recreation',
+         groc_pharm = "Grocery & pharmacy",
+         transit = "Transit stations",
+         parks = 'Parks',
+         workplaces = 'Workplaces')
+
+
+
+# 311 data ----------------------------------------------------------------
+
+three11 <- read_csv('Analyses/COVID-impact/311_Service_Requests_from_2010_to_Present.csv') 
+  
+three11 <- three11 %>% 
+  select(date = `Created Date`,
+         type = `Complaint Type`,
+         Descriptor,
+         City) %>% 
+  mutate(date = mdy_hms(date, tz = Sys.timezone()) %>% as.Date(),
+         month = month(date),
+         year = year(date)) %>% 
+  filter(month %in% 1:4,
+         year %in% 2019:2020) %>% 
+  mutate(type = str_to_sentence(type))
+
+# plot of social distancing
+three11 %>% 
+  filter(grepl('*distancing*', Descriptor, ignore.case = TRUE)) %>% 
+  count(date) %>% 
+  ggplot(aes(x = date, y = n)) +
+  geom_line() +
+  geom_point()
+
+
+top.cats.by.change <- tibble(
+  type = c(
+    'Non-emergency police matter',
+    'Consumer complaint',
+    'Blocked driveway',
+    'Abandoned vehicle',
+    'Derelict vehicles',
+    'Illegal parking',
+    'For hire vehicle complaint',
+    'General',
+    'Noise - commercial',
+    'Noise - street/sidewalk',
+    'Rodent',
+    'Street condition',
+    'Lost property',
+    'Panhandling',
+    'School maintenance',
+    'Taxi complaint',
+    'Derelict bicycle'
+  )
+)
+
+# filter to the top categories
+summ.311 <- three11 %>% 
+  inner_join(top.cats.by.change) %>% 
+  select(date, type, year) %>% 
+  count(date, type, year) %>% 
+  mutate(Month.Day = paste0(month(date), "-", day(date))) %>% 
+  group_split(type)
+
+# convert complaints to two column: one for 2019 and one for 2020; grouped by complaint type
+summ.311 <- map_dfc(summ.311, function(tbl){
+  
+  # pull and type name
+  name <- tbl$type[[1]] %>% 
+    str_replace_all("/", " ") %>% 
+    str_replace_all("-", " ") %>% 
+    str_squish() %>% 
+    str_replace_all(" ", "_")
+  
+  wide.tbl <- tbl %>% 
+    filter(date >= as.Date('2020-01-01'),
+           date <= as.Date('2020-03-31')) %>% 
+    # ensure all dates are included
+    full_join(tibble(date = seq(as.Date("2020-01-01"), 
+                                as.Date("2020-03-31"), 
+                                by = 1))) %>% 
+    replace_na(replace = list(n = 0)) %>% 
+    mutate(Month.Day = paste0(month(date), "-", day(date))) %>% 
+    left_join(
+      tbl %>% 
+        filter(date >= as.Date('2019-01-01'),
+               date <= as.Date('2019-04-02')) %>% 
+        select(year, n.y = n, Month.Day) %>% 
+        mutate(n = lead(n.y, n = 2)) %>% 
+        select(-n.y), # move 2019 data two days forward to match weekdays
+      by = "Month.Day"
+    ) %>% 
+    select(date, n.x, n.y) %>% 
+    arrange(date)
+
+  # clean up names
+  names(wide.tbl) <- c("date", 
+                       paste0(name, '_2020'),
+                       paste0(name, '_2019'))
+  
+  return(wide.tbl)
+}) %>% 
+  select(-matches('date[1-9]'))
+
+# remove extra date columns
+summ.311 %>% 
+  mutate(text = format(date, "%b %d")) %>% 
+  write_csv('Analyses/COVID-impact/threeOneOne.csv')
+
+var.names <- colnames(summ.311)[-1]
+
+# names for d3
+paste0(var.names, " : d.", var.names, ",", collapse =  " ")
+
+# names for html
+no.year.names <- str_sub(var.names, end = -6) %>% unique() %>% sort()
+clean.names <- str_replace_all(no.year.names, "_", " ")
+paste0('<a onclick="update311(\'', no.year.names, "'); changeText311('", clean.names, "')\">", clean.names, "</a>") %>% 
+  writeLines()
 
 # combine all data and write out ------------------------------------------
 
@@ -307,6 +420,7 @@ summ.ts %>%
   left_join(summ.bikes) %>% 
   left_join(unemployment) %>% 
   left_join(flights) %>% 
+  left_join(g.trends) %>% 
   mutate(subway_2020 = subway_2020 / 1e6, 
          subway_2019 = subway_2019 / 1e6,
          bike_2020 = bike_2020 / 1e3,
