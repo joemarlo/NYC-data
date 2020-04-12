@@ -150,8 +150,8 @@ turnstile.df %>%
 # remove outlier week and non-Jan-March dates
 turnstile.df <- turnstile.df %>% 
   filter(Date != as.Date("2019-01-12"),
-         Date %in% seq(min.date.2019, max.date.2019 + 2, by = 1) | 
-           Date %in% seq(min.date, max.date, by = 1)) %>% 
+         Date %in% seq(min.date.2019, max.date.2019 + 3, by = 1) | 
+           Date %in% seq(min.date, max.date + 2, by = 1)) %>% 
   mutate(Month.Day = paste0(month(Date), '-', day(Date)))
 
 # convert ridership to two column: one for 2019 and one for 2020
@@ -160,12 +160,26 @@ summ.ts <- turnstile.df %>%
   left_join(
     turnstile.df %>% 
       filter(Date < min.date) %>% 
-      select(-Date) %>% 
-      # move 2019 data two days forward to match weekdays
-      mutate(Daily.ridership  = lead(Daily.ridership , n = 2)),
+      select(-Date),
     by = "Month.Day"
     ) %>% 
   select(date = Date, subway_2020 = Daily.ridership.x, subway_2019 = Daily.ridership.y)
+
+# adjust dates to match weekdays
+summ.ts <- summ.ts %>% 
+  filter(date %in% seq(as.Date('2020-01-01'), as.Date('2020-02-28'), by = 1)) %>% 
+  # lead one day for dates prior to the leap
+  mutate(subway_2019  = lead(subway_2019 , n = 1)) %>% 
+  select(-subway_2020) %>% 
+  bind_rows(
+    summ.ts %>% 
+      filter(date %in% seq(as.Date('2020-02-29'), max.date + 2, by = 1)) %>% 
+      # lead two days for dates after to the leap
+      mutate(subway_2019  = lead(subway_2019 , n = 2)) %>% 
+      select(-subway_2020) 
+  ) %>% 
+  left_join(summ.ts %>% select(-subway_2019)) %>% 
+  select(date, subway_2020, subway_2019)
 
 # citibike ----------------------------------------------------------------
 
@@ -199,17 +213,17 @@ summ.bikes <- bike.trips.df %>%
 
 
 # convert ridership to two column: one for 2019 and one for 2020
-summ.bikes <- summ.bikes %>% 
-  filter(date >= min.date) %>% 
-  left_join(
-    summ.bikes %>% 
-      filter(date <= min.date) %>% 
-      select(-date),
-    # move 2019 data two days forward to match weekdays
-    mutate(bike_count  = lead(bike_count , n = 2)),
-    by = "Month.Day"
-  ) %>% 
-  select(date, bike_2020 = bike_count.x, bike_2019 = bike_count.y)
+# summ.bikes <- summ.bikes %>% 
+#   filter(date >= min.date) %>% 
+#   left_join(
+#     summ.bikes %>% 
+#       filter(date <= min.date) %>% 
+#       select(-date),
+#     # move 2019 data two days forward to match weekdays
+#     mutate(bike_count  = lead(bike_count , n = 2)),
+#     by = "Month.Day"
+#   ) %>% 
+#   select(date, bike_2020 = bike_count.x, bike_2019 = bike_count.y)
 
 
 ## interim fix until march citibike data is avail
@@ -223,6 +237,22 @@ summ.bikes <- summ.bikes %>%
   ) %>% 
   select(date, bike_2020 = bike_count.y, bike_2019 = bike_count.x) %>% 
   mutate(date = as.Date(paste0("2020-", month(date), "-", day(date))))
+
+# adjust dates to match weekdays
+summ.bikes <- summ.bikes %>% 
+  filter(date %in% seq(as.Date('2020-01-01'), as.Date('2020-02-28'), by = 1)) %>% 
+  # lead one day for dates prior to the leap
+  mutate(bike_2019 = lead(bike_2019 , n = 1)) %>% 
+  select(-bike_2020) %>% 
+  bind_rows(
+    summ.bikes %>% 
+      filter(date %in% seq(as.Date('2020-02-29'), max.date, by = 1)) %>% 
+      # lead two days for dates after to the leap
+      mutate(bike_2019  = lead(bike_2019 , n = 2)) %>% 
+      select(-bike_2020) 
+  ) %>% 
+  left_join(summ.bikes %>% select(-bike_2019)) %>% 
+  select(date, bike_2020, bike_2019)
 
 
 
@@ -322,6 +352,7 @@ summ.ts %>%
          ICSA_2019 = ICSA_2019 / 1e6,
          flights = flights / 1e3,
          text = format(date, "%b %d")) %>% 
+  filter(date <= max.date) %>% 
   write_csv('Analyses/COVID-impact/sub_citi_unemp_flights.csv')
 
 # 311 data ----------------------------------------------------------------
@@ -336,8 +367,8 @@ three11 <- three11 %>%
   mutate(date = mdy_hms(date, tz = Sys.timezone()) %>% as.Date(),
          month = month(date),
          year = year(date)) %>% 
-  filter(month %in% 1:4,
-         year %in% 2019:2020) %>% 
+  filter(year %in% 2019:2020,
+         month %in% 1:4) %>% 
   mutate(type = str_to_sentence(type))
 
 # plot of social distancing
@@ -348,7 +379,7 @@ three11 %>%
   geom_line() +
   geom_point()
 
-
+# choose the most interesting categories based on Feb->March trend and YoY
 top.cats.by.change <- tibble(
   type = c(
     'Non-emergency police matter',
@@ -388,12 +419,12 @@ summ.311 <- map_dfc(summ.311, function(tbl){
     str_squish() %>% 
     str_replace_all(" ", "_")
   
-  wide.tbl <- tbl %>% 
+  wide.tbl <-  tbl %>% 
     filter(date >= min.date,
-           date <= max.date) %>% 
+           date <= max.date + 2) %>% 
     # ensure all dates are included
     full_join(tibble(date = seq(min.date, 
-                                max.date, 
+                                max.date + 2, 
                                 by = 1))) %>% 
     replace_na(replace = list(n = 0)) %>% 
     mutate(Month.Day = paste0(month(date), "-", day(date))) %>% 
@@ -401,14 +432,28 @@ summ.311 <- map_dfc(summ.311, function(tbl){
       tbl %>% 
         filter(date >= min.date.2019,
                date <= max.date.2019 + 2) %>% 
-        select(year, n.y = n, Month.Day) %>% 
-        mutate(n = lead(n.y, n = 2)) %>% 
-        select(-n.y), # move 2019 data two days forward to match weekdays
+        select(year, n, Month.Day),
       by = "Month.Day"
     ) %>% 
     select(date, n.x, n.y) %>% 
     arrange(date)
-
+  
+  # adjust dates to match weekdays
+  wide.tbl <- wide.tbl %>% 
+    filter(date %in% seq(as.Date('2020-01-01'), as.Date('2020-02-28'), by = 1)) %>% 
+    # lead one day for dates prior to the leap
+    mutate(n.y = lead(n.y , n = 1)) %>% 
+    select(-n.x) %>% 
+    bind_rows(
+      wide.tbl %>% 
+        filter(date %in% seq(as.Date('2020-02-29'), max.date + 2, by = 1)) %>% 
+        # lead two days for dates after to the leap
+        mutate(n.y  = lead(n.y , n = 2)) %>% 
+        select(-n.x) 
+    ) %>% 
+    left_join(wide.tbl %>% select(-n.y)) %>% 
+    select(date, n.x, n.y)
+  
   # clean up names
   names(wide.tbl) <- c("date", 
                        paste0(name, '_2020'),
@@ -421,6 +466,7 @@ summ.311 <- map_dfc(summ.311, function(tbl){
 # remove extra date columns
 summ.311 %>% 
   mutate(text = format(date, "%b %d")) %>% 
+  filter(date <= max.date) %>% 
   write_csv('Analyses/COVID-impact/threeOneOne.csv')
 
 var.names <- colnames(summ.311)[-1]
