@@ -267,6 +267,7 @@ unemployment <- tidyquant::tq_get('ICSA',
   arrange(date) %>% 
   mutate(Month.Day = paste0(month(date), '-', day(date)))
 
+# weekly unempployment claims: ICSA
 
 # convert ridership to two column: one for 2019 and one for 2020
 unemployment <- unemployment %>% 
@@ -293,6 +294,45 @@ unemployment <- unemployment %>%
 #   mutate(ICSA = ICSA / 1e5,
 #          text = format(DATE, "%b %d")) %>% 
 #   write_csv('unemp.csv')
+
+
+# Monthly advance retail and food sales: RRSFS
+# Advance Retail Sales: Retail (Excluding Food Services) (RSXFS)
+# Advance Retail Sales: Retail and Food Services, Total (RSAFS) 
+
+
+# econ sales data ---------------------------------------------------------
+
+# create dataframe of FRED codes and their descriptions
+econ.codes <- tribble(~Description, ~Code,
+'Advance Retail Sales: Health and Personal Care Stores', 'RSHPCSN',
+'Advance Retail Sales: General Merchandise Store', 'RSGMSN',
+'Advance Retail Sales: Sporting Goods, Hobby, Book, and Music Stores', 'RSSGHBMSN',
+'Advance Retail Sales: Motor Vehicle and Parts Dealers', 'RSMVPDN',
+'Advance Retail Sales: Building Materials, Garden Equipment and Supplies Dealers', 'RSBMGESDN',
+'Advance Retail Sales: Department Stores', 'RSDSELDN',
+'Advance Retail Sales: Gasoline Stations', 'RSGASSN',
+'Advance Retail Sales: Electronics and Appliance Stores', 'RSEASN',
+'Advance Retail Sales: Clothing and Clothing Accessory Stores', 'RSCCASN',
+'Advance Retail Sales: Furniture and Home Furnishings Stores', 'RSFHFSN',
+'Advance Retail Sales: Food and Beverage Stores', 'RSDBSN',
+'Advance Retail Sales: Grocery Stores', 'RSGCSN',
+'Advance Retail Sales: Food Services and Drinking Places', 'RSFSDPN',
+'Advance Retail Sales: Retail and Food Services', 'RSAFSNA',
+'Advance Retail Sales: Retail (Excluding Food Services)', 'RSXFSN'
+) %>% 
+  mutate(Description = str_remove(Description, 'Advance Retail Sales: '))
+
+
+# read in the data from the StL Fed via tidyquant
+econ <- tidyquant::tq_get(econ.codes$Code, 
+                                  get = "economic.data", 
+                                  from = "2019-01-01") %>% 
+  left_join(econ.codes, by = c('symbol' = 'Code')) %>% 
+  arrange(date) %>% 
+  mutate(Month.Day = paste0(month(date), '-', day(date)))
+
+
 
 
 
