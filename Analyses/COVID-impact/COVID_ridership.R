@@ -213,40 +213,41 @@ summ.bikes <- bike.trips.df %>%
 
 
 # convert ridership to two column: one for 2019 and one for 2020
-# summ.bikes <- summ.bikes %>% 
-#   filter(date >= min.date) %>% 
-#   left_join(
-#     summ.bikes %>% 
-#       filter(date <= min.date) %>% 
-#       select(-date),
-#     # move 2019 data two days forward to match weekdays
-#     mutate(bike_count  = lead(bike_count , n = 2)),
-#     by = "Month.Day"
-#   ) %>% 
-#   select(date, bike_2020 = bike_count.x, bike_2019 = bike_count.y)
+summ.bikes <- summ.bikes %>%
+  filter(date %in% seq(min.date, max.date + 2, by = 1)) %>% 
+  bind_rows(tibble(date = seq(as.Date('2020-04-01'), as.Date('2020-04-02'), by = 1),
+                   bike_count = NA,
+                   Month.Day = c('4-1', '4-2'))) %>% 
+  full_join(
+    summ.bikes %>%
+      filter(date %in% seq(min.date.2019, max.date.2019 + 1, by = 1)) %>% 
+      select(-date),
+    by = "Month.Day"
+  ) %>%
+  select(date, bike_2020 = bike_count.x, bike_2019 = bike_count.y)
 
 
 ## interim fix until march citibike data is avail
-summ.bikes <- summ.bikes %>% 
-  filter(date %in% seq(min.date.2019, max.date.2019, by = 1)) %>% 
-  left_join(
-    summ.bikes %>% 
-      filter(date >= min.date) %>% 
-      select(-date),
-    by = "Month.Day"
-  ) %>% 
-  select(date, bike_2020 = bike_count.y, bike_2019 = bike_count.x) %>% 
-  mutate(date = as.Date(paste0("2020-", month(date), "-", day(date))))
+# summ.bikes <- summ.bikes %>%
+#   filter(date %in% seq(min.date.2019, max.date.2019, by = 1)) %>%
+#   left_join(
+#     summ.bikes %>%
+#       filter(date >= min.date) %>%
+#       select(-date),
+#     by = "Month.Day"
+#   ) %>%
+#   select(date, bike_2020 = bike_count.y, bike_2019 = bike_count.x) %>%
+#   mutate(date = as.Date(paste0("2020-", month(date), "-", day(date))))
 
 # adjust dates to match weekdays
 summ.bikes <- summ.bikes %>% 
   filter(date %in% seq(as.Date('2020-01-01'), as.Date('2020-02-28'), by = 1)) %>% 
   # lead one day for dates prior to the leap
-  mutate(bike_2019 = lead(bike_2019 , n = 1)) %>% 
+  mutate(bike_2019 = lead(bike_2019, n = 1)) %>% 
   select(-bike_2020) %>% 
   bind_rows(
     summ.bikes %>% 
-      filter(date %in% seq(as.Date('2020-02-29'), max.date, by = 1)) %>% 
+      filter(date %in% seq(as.Date('2020-02-29'), max.date + 2, by = 1)) %>% 
       # lead two days for dates after to the leap
       mutate(bike_2019  = lead(bike_2019 , n = 2)) %>% 
       select(-bike_2020) 
@@ -332,7 +333,45 @@ econ <- tidyquant::tq_get(econ.codes$Code,
   arrange(date) %>% 
   mutate(Month.Day = paste0(month(date), '-', day(date)))
 
+econ %>% 
+  ggplot(aes(x = date, y = price)) +
+  geom_point() +
+  geom_line() +
+  facet_wrap(~Description, scales = 'free_y')
 
+# 
+# econ <- econ %>% 
+#   filter(month(date) %in% 1:3) %>% 
+#   select(date, price, Description, Month.Day) %>% 
+#   pivot_wider(names_from = "Description", values_from = "price")
+#   
+# econ %>% 
+#   filter(year(date) == 2020) %>% 
+#   left_join(
+#     x = .,
+#     y = econ %>% 
+#       filter(year(date) == 2019),
+#     by = c('Month.Day', 'Description')
+#   ) %>% 
+#   pivot_wider(names_from = Description, values_from = )
+#   rename(date = date.x, price)
+# 
+# econ %>% 
+#   filter(Month.Day %in% c("1-1", "2-1", "3-1", "4-1")) %>%
+#   group_by(Description) %>% 
+#   group_modify(
+#     .x %>% 
+#       filter(year(date) == 2020) %>% 
+#       select(date, price, Description) %>% 
+#       bind_cols(
+#         .x %>% 
+#           filter(year(date) == 2019) %>% 
+#           select(date, price, Description) %>% 
+#       ) %>% 
+#       left_join(wide.tbl %>% select(-n.y)) %>% 
+#       select(date, n.x, n.y)
+#   ) %>% 
+  
 
 
 

@@ -116,7 +116,7 @@ turnstile.df %>%
   scale_colour_manual(values = c("forestgreen", "#2b7551", "gray80")) +
   theme(legend.position = "none") +
   scale_x_continuous(breaks = 1:7,
-                     labels = c("Sunday", "Monday", "Tuesday", "Wedneday", "Thursday", "Friday", "Saturday"),
+                     labels = c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"),
                      name = NULL) +
   scale_y_continuous(labels = scales::comma,
                      name = "Daily station ridership") +
