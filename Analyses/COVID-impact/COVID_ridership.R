@@ -339,6 +339,21 @@ econ %>%
   geom_line() +
   facet_wrap(~Description, scales = 'free_y')
 
+
+econ %>% 
+  filter(Month.Day %in% paste0(1:3, "-1")) %>% 
+  mutate(year = year(date),
+         Month.Day = str_sub(Month.Day, end = 1) %>% as.numeric()) %>% 
+  mutate(id = paste0(str_replace_all(symbol, " ", "_"), "_", year)) %>% 
+  select(id, price, Description, Month = Month.Day) %>%
+  arrange(id, Month) %>% 
+  group_by(id) %>% 
+  mutate(index = price / first(price)) %>% 
+  ggplot(aes(x = Month, y = index, group = id, color = Description)) +
+  geom_line()
+  
+
+
 # 
 # econ <- econ %>% 
 #   filter(month(date) %in% 1:3) %>% 
