@@ -73,4 +73,4 @@ final_dataset <- daily_counts %>%
   select(-Date)
 
 # write out the dataset
-write_csv(final_dataset, 'Analyses/Bayesian_project/Daily_Citibike_counts.csv')
+write_csv(final_dataset, 'Analyses/Bayesian-Citibike/Daily_Citibike_counts.csv')
