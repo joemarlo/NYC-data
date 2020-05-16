@@ -210,6 +210,37 @@ minute.counts %>%
 #        width = 9,
 #        height = 5)
 
+
+
+# average daily trips by year -----------------------------------------------
+
+tables <- dbListTables(conn) %>% grep("citibike*", ., value = TRUE)
+year_counts <- data.frame()
+for (table in tables){
+  annual_count <- tbl(conn, table) %>%
+    count() %>% 
+    collect() %>% 
+    pull()
+  
+  annual_days <- tbl(conn, table) %>%
+    collect() %>%
+    mutate(Date = date(as_datetime(Starttime))) %>% 
+    pull(Date) %>% 
+    n_distinct()
+  
+  year_counts <- bind_rows(year_counts, 
+                           tibble(Year = table, 
+                                  Annual_count = annual_count, 
+                                  Annual_days = annual_days))
+  gc()
+}
+
+year_counts %>% 
+  # mutate(Daily_avg = scales::comma(Annual_count / Annual_days))
+  mutate(Daily_avg = Annual_count / Annual_days) %>% 
+  ggplot(aes(x = Year, y = Daily_avg)) + geom_col()
+
+
 # scratch code ------------------------------------------------------------
 
 #bike trips from our station
