@@ -1,0 +1,506 @@
+---
+title: "APSTA-GE 2123 Project"
+author: "Joseph Marlo"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+  html_document:
+    df_print: paged
+urlcolor: blue
+editor_options:
+  chunk_output_type: console
+header-includes:
+  \usepackage{float}
+  \floatplacement{figure}{H}
+  \usepackage{inconsolata}
+  \usepackage{textcomp}
+---
+
+```{r setup, include=FALSE}
+library(Cairo) #for times font in ggplot, fixes some latex issue
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.pos = 'H')
+knitr::opts_chunk$set(dev = "cairo_pdf")
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(knitr)
+library(pander)
+library(tidyverse)
+library(brms)
+options(mc.cores = parallel::detectCores())
+options(scipen = 999)
+set.seed(44)
+panderOptions('big.mark', ',')
+
+Citibike <- read_csv('Daily_Citibike_counts.csv')
+
+# split dataset to train and test
+sample_indices <- sample(c(TRUE, FALSE), nrow(Citibike), replace = TRUE, prob = c(0.8, 0.2))
+Citibike_train <- Citibike[sample_indices,]
+Citibike_test <- Citibike[!sample_indices,]
+```
+
+```{r helper-functions, include=FALSE}
+theme_custom <- function() {
+    theme_minimal() +
+        theme(
+            plot.caption = element_text(face = "italic",
+                                        size = 6,
+                                        color = 'grey50'),
+            legend.title = element_blank(),
+            legend.position = 'bottom',
+            legend.key = element_rect(fill = NA),
+            text = element_text(family = "Times New Roman")
+        )
+}
+
+theme_set(theme_custom())
+
+print_summary <- function(mu, caption, ...){
+  # function formated deciles of mu
+  
+  quantile(mu, seq(0, 1, length.out = 11)) %>% 
+    t() %>% 
+    pander(justify = 'right', caption = caption, split.table = Inf, ...)
+}
+
+RMSE <- function(Y_hat, Y){
+  #function to calculate RMSE
+  sqrt(mean((Y_hat - Y)^2))
+}
+```
+
+\pagebreak
+
+# Introduction
+
+Citi Bike is the number three^[[2019 NYC Mobility Report](https://www1.nyc.gov/html/dot/downloads/pdf/mobility-report-singlepage-2019.pdf)] mode of public transportation in New York City behind the subway and buses. There were 1,169,973 Citi  ike trips in February 2020 equaling to 40,343 daily trips^[[Citi Bike February 2020 Monthly Report](https://d21xlh2maitm24.cloudfront.net/nyc/February-2020-Citi-Bike-Monthly-Report.pdf?mtime=20200313132246)]. Unlike it's larger counterparts, Citi Bike daily ridership is difficult to predict as it is a mixture of commuter and leisure riders, the former is tied to weekdays and the latter is tied to the weather. 
+
+## Research question
+
+Can Citi Bike ridership be accurately predicted using only basic information on the day: day of the week and the weather?  
+
+
+# Citi Bike data
+
+Citi Bike publishes real-time and monthly datasets^[[Citi Bike system data](https://www.citibikenyc.com/system-data)] detailing each bike trip taken since 2013. Information includes the date, start- and end-times, departure and arrival stations, subscriber status, rider sex and rider birth year. Ridership has been steadily growing with an average daily ridership of 26,238 in 2013 compared to 56,306 in 2019. To minimize the impact of this omitted growth variable while maximizing the size of the training set, only data from 2017, 2018, and 2019 will be included. The data is then aggregated and bike trip counts are calculated for each day^[[Aggregation script on Github](https://github.com/joemarlo/NYC-data/blob/master/Analyses/Bayesian-Citibike/Dataset_for_bayesian_project.R)]. A random sample of 80% is used to train the model and the remaining 20% is used for model prediction evaluation.
+
+## Weather data
+The Citi Bike dataset does not contain weather data. Weather information is obtained from the National Oceanic and Atmospheric Administration (NOAA) for the Central Park weather station. Information includes the daily precipitation, average temperature, and maximum gust speed. The data is collected during the day (i.e. ex post). The final model will be used for prediction so a practical application would require a weather forecast (i.e. ex ante). This discontinuity is acceptable as one-day weather forecasts are quite accurate.
+
+## Final dataset
+
+The final dataset^[[Final dataset on Github](https://github.com/joemarlo/NYC-data/blob/master/Analyses/Bayesian-Citibike/Daily_Citibike_counts.csv)] consists of `r scales::comma(nrow(Citibike))` observations and `r ncol(Citibike)` variables.
+
+```{r table of variable descriptions, echo=FALSE}
+tribble(
+  ~Variable, ~Type, ~Description,
+  'Trip_count', 'continuous', 'Count of daily Citi Bike trips',
+  'Weekday', 'boolean', '1 = weekday, 0 = weekend',
+  'Precipitation', 'boolean', '1 = rain, 0 = no rain',
+  'Temp', 'integer', 'Average daily temperature in Fahrenheit',
+  'Gust_speed', 'continuous', 'Maximum gust speed in miles per hour'
+  ) %>%
+  pander::pander(justify = 'left',
+                 caption = 'Dataset description')
+```
+
+
+# Model selection
+
+The outcome variable is a simple count of how many bike trips occurred in a single day. Count data is frequently modeled using a Poisson model or the more flexible negative binomial model. First, I will fit a negative binomial then evaluate it against a Poisson.
+
+The model form in R syntax:  
+\begin{center}
+\texttt{Trip count $\sim$ Weekday + Precipitation + Temperature + Gust speed}
+\end{center}
+
+
+# Drawing from the prior predictive distribution
+
+Priors first need to be set for each coefficient, the intercept, and shape parameter. Passing the model specification to `brms::get_prior()` returns the priors that need to be set along with their default values.
+
+Temperature and gust speed are not likely to have large effects on the outcome for each one unit increase. Temperature is in Fahrenheit and gust speed is in miles per hour. A one unit increase in either of these will unlikely to have a measurable effect on the trips. Both are set to $N(0, 0.01)$.
+
+Weekday and precipitation, I believe, are more likely to have a larger effect since these are binary variables. However, their effects will be inverses of each other: weekdays have more commuter riders and rainy days have less overall riders The priors are set to $N(0.5, 0.1)$ and $N(-0.5, 0.1)$ respectively.
+
+<!-- ```{r eval=FALSE, include=FALSE} -->
+<!-- get_prior(Trip_count ~ Weekday + Precipitation + Temp + Gust_speed, -->
+<!--           data = Citibike_train, family = 'negbinomial') -->
+<!-- ``` -->
+
+```{r set priors, message=FALSE, warning=FALSE, include=FALSE}
+priors <- prior(normal(0, 0.01), coef = "Gust_speed") +
+  prior(normal(-0.5 , 0.1), coef = "Precipitation") +
+  prior(normal(0.0, 0.01), coef = "Temp") +
+  prior(normal(0.5, 0.1), coef = "Weekday") +
+  prior(normal(10, 1), class = "Intercept") +
+  prior(exponential(10), class = "shape")
+```
+
+```{r print priors, fig.cap="Priors", echo=FALSE, message=FALSE, warning=FALSE}
+priors[, 1:3] %>% pander(justify = 'left', caption = "Priors")
+```
+
+```{r draw from priors, message=FALSE, warning=FALSE, include=FALSE, results='hide'}
+draws <- brm(Trip_count ~ Weekday + Precipitation + Temp + Gust_speed,
+          data = Citibike_train, family = 'negbinomial',
+          prior = priors, sample_prior = "only")
+```
+
+<!-- ```{r draws pairs plot, eval=FALSE, fig.cap="Pairs plot of prior draws", fig.height=4, fig.width=6, include=FALSE} -->
+<!-- pairs(draws) -->
+<!-- ``` -->
+
+```{r examine priors, include=FALSE}
+prior_mu <- pp_expect(draws, nsamples = 4000)
+```
+
+We can draw from this model using `brms::brm()` with the optional arguments `family = 'negbinomial'` and `sample_prior = "only"`. Then we compute the expected value using `brms::pp_expect()`. These draws from the prior distribution of the conditional expectation are reasonable. Examining the deciles shows that the middle 90% are covering a reasonable range of data. The values are little low but close to the actuals: the mean draw is `r scales::comma(mean(prior_mu))` whereas the mean daily ridership for 2017-2019 is closer to 50,000.
+
+
+```{r priors density plot, echo=FALSE, fig.cap="Density of prior estimates and draws", fig.height=2.5, fig.width=6.5, message=FALSE, warning=FALSE}
+# grid of density plots of estimates
+gg_priors <- as.matrix(draws) %>% 
+  as_tibble() %>% 
+  pivot_longer(cols = everything()) %>% 
+  mutate(name = str_remove(name, "^b_"),
+         name = str_remove(name, "__"),
+         name = factor(name, levels = c("Gust_speed", "Precipitation", "Temp", "Weekday", "Intercept", "shape", 'lp'))) %>% 
+  filter(name != 'lp') %>% 
+  ggplot(aes(x = value)) +
+  geom_density() +
+  facet_wrap(~name, scales = 'free') +
+  labs(title = 'Densities of prior estimates',
+       subtitle = '4,000 samples',
+       x = NULL,
+       y = NULL) +
+  theme(axis.text = element_text(size = 7),
+        axis.text.x = element_text(angle = 60, hjust = 1),
+        plot.margin = unit(c(5.5, 20, 5.5, 5.5), "pt"))
+
+# density plot of mus
+gg_mus <- prior_mu %>%
+  as.vector() %>%
+  enframe() %>%
+  ggplot(aes(x = value)) +
+  geom_density() +
+  scale_x_log10(labels = scales::comma) +
+  labs(title = "Density of prior draws",
+       subtitle = "4,000 samples",
+       x = NULL,
+       y = NULL) +
+  theme(plot.margin = unit(c(5.5, 5.5, 5.5, 20), "pt"))
+
+gridExtra::grid.arrange(gg_priors, gg_mus, ncol = 2)
+```
+
+```{r prior draws summary, echo=FALSE}
+print_summary(prior_mu, "Deciles of prior draws")
+```
+
+
+# Conditioning on the observed data
+
+Since the priors are reasonable we can now condition on the data using `brms::update(..., sample_prior = "no")`.
+
+```{r condition on data, include=FALSE, results='hide'}
+post_nb <- update(draws, sample_prior = "no")
+```
+
+<!-- ```{r model summary, include=FALSE, results='hide'} -->
+<!-- summary(post_nb) -->
+<!-- ``` -->
+
+After running this, we see the model converges and Rhat values are each 1.00. The effective-sample-sizes are all large as well, ranging from 2,800 to 5,200. We also see the estimates are close to the priors. The largest surprise is that precipitation has a larger effect on the outcome than weekday which may indicate that the hypothesized weekday commuters do not have as strong a positive effect as rain has a negative effect.
+
+```{r nb fixed effects summary, echo=FALSE}
+summary(post_nb)$fixed %>%
+  pander(justify = c('left', rep('right', 7)), caption = "Fixed effects", split.table = Inf, round = 3)
+```
+
+
+<!-- ```{r post draws pairs plot, eval=FALSE, fig.cap="Pairs plot of post draws", fig.height=4, fig.width=6, include=FALSE, results='hide'} -->
+<!-- pairs(post_nb) -->
+<!-- ``` -->
+
+```{r examine post, include=FALSE}
+post_mu <- pp_expect(post_nb, nsamples = 4000)
+```
+
+The posterior draws are well within range. The middle 90% `r paste0('[', scales::comma(quantile(post_mu, 0.1)), ', ', scales::comma(quantile(post_mu, 0.9)), ']')` fits the data well; the middle 90% of the actual data is `r paste0('[', scales::comma(quantile(Citibike_test$Trip_count, 0.1)), ', ', scales::comma(quantile(Citibike_test$Trip_count, 0.9)), ']')`. Additionally, the mean (`r scales::comma(mean(post_mu))`) and median (`r scales::comma(median(post_mu))`) are close to the actual data (`r scales::comma(mean(Citibike_test$Trip_count))` and  `r scales::comma(median(Citibike_test$Trip_count))` respectively).
+
+
+
+```{r post density plot, echo=FALSE, fig.cap="Density of posterior estimates and draws", fig.height=2.5, fig.width=6.4, message=FALSE, warning=FALSE}
+# grid of density plots of estimates
+gg_post <- as.matrix(post_nb) %>% 
+  as_tibble() %>% 
+  pivot_longer(cols = everything()) %>% 
+  mutate(name = str_remove(name, "^b_"),
+         name = str_remove(name, "__"),
+         name = factor(name, levels = c("Gust_speed", "Precipitation", "Temp", "Weekday", "Intercept", "shape", 'lp'))) %>% 
+  filter(name != 'lp') %>% 
+  ggplot(aes(x = value)) +
+  geom_density() +
+  facet_wrap(~name, scales = 'free') +
+  labs(title = 'Densities of posterior estimates',
+       subtitle = '4,000 samples',
+       x = NULL,
+       y = NULL) +
+  theme(axis.text = element_text(size = 7),
+        axis.text.x = element_text(angle = 60, hjust = 1),
+        plot.margin = unit(c(5.5, 20, 5.5, 5.5), "pt"))
+
+# density plot of mus
+gg_post_mus <- post_mu %>%
+  as.vector() %>%
+  enframe() %>%
+  ggplot(aes(x = value)) +
+  geom_density() +
+  scale_x_log10(labels = scales::comma) +
+  labs(title = "Density of posterior draws",
+       subtitle = "4,000 samples",
+       x = NULL,
+       y = NULL) +
+  theme(plot.margin = unit(c(5.5, 5,5, 5.5, 20), "pt"))
+
+gridExtra::grid.arrange(gg_post, gg_post_mus, ncol = 2)
+```
+
+```{r post draws summary, echo=FALSE}
+print_summary(post_mu, "Deciles of posterior draws")
+```
+
+
+# Evaluating the negative binomial model
+
+The model meets all the criteria. Executing leave-one-out cross-validation via `brms::loo()` we see the Pareto $k$ estimates for the negative binomial model are fine with values less than 0.5. The expected log predictive density (ELPD) of the model is approximately -8,000.
+
+&nbsp;
+
+```{r posterior predictive plots, echo=FALSE, message=FALSE, warning=FALSE}
+nb_loo <- loo(post_nb)
+
+nb_loo$estimates %>%
+  pander(justify = 'right', caption = 'Negative binomial evaluation', round = 3)
+```
+
+&nbsp;
+
+```{r loo plot, echo=FALSE, fig.cap="Negative binomial model does not contain large Pareto k values", fig.height=3.5, fig.width=5.5, message=FALSE, warning=FALSE, results='hide'}
+colors <- c('low' = '#baccd9', 'medium' = '#7793a8', 'high' = '#03396c')
+nb_loo$diagnostics$pareto_k %>% 
+  enframe() %>% 
+  mutate(color = case_when(
+    value < 0.5 ~ 'low',
+    value < 1 ~ 'medium',
+    TRUE ~ 'high',
+  )) %>% 
+  ggplot(aes(x = name, y = value)) +
+  geom_point(alpha = 0.8, aes(color = color)) +
+  # geom_hline(yintercept = 1, color = 'black') +
+  # geom_hline(yintercept = 0.5, color = 'black', linetype = 'dashed') +
+  scale_color_manual(values = colors, guide = FALSE) +
+  labs(title = "PSIS diagnostic:  Negative binomial  model",
+       x = 'Data point (index)',
+       y = 'Pareto shape k')
+```
+
+
+The model estimates are in-line with the actual observations. The credible interval may be wide but the middle of the estimates are close to the actuals.
+
+
+```{r pp plot, echo=FALSE, fig.cap="Negative binomial in-sample performance", fig.height=3.5, fig.width=5.5, message=FALSE, warning=FALSE, results='hide'}
+pp_check(post_nb, type = "loo_intervals") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = 'Negative binomial in-sample performance',
+       subtitle = paste0('Training dataset of ', nrow(Citibike_train), ' observations'))
+```
+
+
+# Predicting new data
+
+The goal of the model is accurate prediction. The data was originally split 80% (`r nrow(Citibike_train)` observations) for training and 20% (`r nrow(Citibike_test)` observations) for testing.
+
+Posterior predictions are made using `brms::posterior_predict()` with argument `newdata = Citibike_test` data. Similar to the in-sample estimates in Figure 5, the out-of-sample estimates in Figure 5 fit the data well but with a wide credible interval.
+
+
+```{r pred plot, echo=FALSE, fig.cap="Negative binomial out-of-sample performance", fig.height=3.5, fig.width=5.5, message=FALSE, warning=FALSE}
+nb_preds <- posterior_predict(post_nb, newdata = Citibike_test)
+nb_means <- colMeans(nb_preds) %>% enframe()
+
+colors <- c("Pred_fill" = "#d1e0eb", "Pred_stroke" = "#b3cddf", "Y_fill" = '#03396c', "Y_stroke" = '#011f4a')
+
+gg_nb_pred <- as_tibble(nb_preds) %>%
+  setNames(1:ncol(nb_preds)) %>%
+  pivot_longer(cols = everything()) %>%
+  mutate(name = as.numeric(name)) %>%
+  ggplot(aes(x = name, y = value, group = name)) +
+  geom_boxplot(aes(color = "Pred_stroke"), alpha = 0.5, outlier.shape = NA) +
+  geom_point(data = nb_means, aes(y = value, x = 1:ncol(nb_preds), fill = 'Pred_fill', color = "Pred_stroke"),
+             size = 3, stroke = 2, shape = 21) +
+  geom_point(data = Citibike_test, aes(y = Trip_count, x = 1:ncol(nb_preds), group = 1:ncol(nb_preds),
+             fill = 'Y_fill',  color = 'Y_stroke'), size = 2, shape = 21) +
+  scale_fill_manual(values = colors, guide = FALSE) +
+  scale_colour_manual(values = colors, labels = c(expression('y'[rep]), "y")) +
+  scale_y_continuous(limits = c(0, 180000), labels = scales::comma) +
+  labs(title = "Negative binomial out-of-sample performance",
+       subtitle = paste0('Test dataset of ', ncol(nb_preds), ' left out observations'),
+       x = 'Data point (index)',
+       y = NULL)
+
+gg_nb_pred
+```
+
+
+#  An alternative model: Poisson
+
+Count data is most frequently associated with poisson models, which are a special case of negative binomial. Below, the negative binomial model is refit as a poisson using the same model form.
+
+&nbsp;
+
+```{r Poisson model, include=FALSE, results='hide'}
+post_pois <- update(post_nb, family = poisson)
+```
+
+```{r pois fixed effects summary, echo=FALSE}
+summary(post_pois)$fixed %>%
+  pander(justify = c('left', rep('right', 7)), caption = "Poisson fixed effects", split.table = Inf, round = 3)
+```
+
+Compared to the negative binomial model it has a worse ELPD, is more complicated (considerably larger `p_loo` value), and has a substantial number of large Pareto $k$.  462 or `r scales::percent(462 / nrow(Citibike_train))` of the observations have Pareto $k$ values large than 0.7 indicating the posterior distribution is sensitive.
+
+&nbsp;
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+pois_loo <- loo(post_pois)
+
+cbind(
+  pois_loo$estimates,
+  nb_loo$estimates
+) %>%
+  `colnames<-`(c("Poisson\nEstimate", "Poisson\nSE",
+                 "Negative binomial\nEstimate", "Negative binomial\nSE")) %>%
+  pander(justify = 'right', caption = 'Model comparison', round = 1, keep.line.breaks = TRUE)
+```
+
+
+
+```{r pois loo plot, echo=FALSE, fig.cap="Poisson model contains many large Pareto k values", fig.height=3.5, fig.width=5.5, message=FALSE, warning=FALSE, results='hide'}
+colors <- c('low' = '#baccd9', 'medium' = '#7793a8', 'high' = '#03396c')
+pois_loo$diagnostics$pareto_k %>% 
+  enframe() %>% 
+  mutate(color = case_when(
+    value < 0.5 ~ 'low',
+    value < 1 ~ 'medium',
+    TRUE ~ 'high',
+  )) %>% 
+  ggplot(aes(x = name, y = value)) +
+  geom_point(alpha = 0.8, aes(color = color)) +
+  geom_hline(yintercept = 1, color = 'black') +
+  geom_hline(yintercept = 0.5, color = 'black', linetype = 'dashed') +
+  scale_color_manual(values = colors, guide = FALSE) +
+  labs(title = "PSIS diagnostic: Poisson model",
+       x = 'Data point (index)',
+       y = 'Pareto shape k')
+```
+
+The poisson model is estimating the data well but is severely overfitting.
+
+
+```{r pois check plot, echo=FALSE, fig.cap="Poisson model in-sample performance", fig.height=3.5, fig.width=5.5, message=FALSE, warning=FALSE, results='hide'}
+pp_check(post_pois, type = "loo_intervals") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = 'Poisson in-sample performance',
+       subtitle = paste0('Training dataset of ', nrow(Citibike_train), ' observations'))
+```
+
+
+## Prediction comparison
+
+The point estimates of each model are similar. Using the mean estimates for each out-of-sample observation, the root-mean-squared-error (RMSE) of the negative binomial and the poisson are close However, the severe overfitting of the poisson relative to the negative binomial is evident in figure 8.
+
+&nbsp;
+
+```{r out of sample predictions, include=FALSE}
+pois_preds <- posterior_predict(post_pois, newdata = Citibike_test)
+pois_means <- colMeans(pois_preds) %>% enframe()
+```
+
+```{r RMSE table, echo=FALSE}
+# print RMSE for each model
+rbind(
+  RMSE(nb_means$value, Citibike_test$Trip_count),
+  RMSE(pois_means$value, Citibike_test$Trip_count)
+) %>%
+  scales::comma() %>%
+  as.data.frame() %>%
+  'colnames<-'('RMSE') %>%
+  'rownames<-'(c('Negative binomial', 'Poisson')) %>%
+  pander(justify = 'right', caption = 'RMSE')
+```
+
+
+
+```{r pred comparison plot, echo=FALSE, fig.cap="Out-of-sample comparison", fig.height=3.5, fig.width=6.5, message=FALSE, warning=FALSE}
+colors <- c("Pred_fill" = "#d1e0eb", "Pred_stroke" = "#b3cddf", 
+            "Y_fill" = '#03396c', "Y_stroke" = '#011f4a')
+
+# plot the predictions similar to loo_intervals
+gg_pois_pred <- as_tibble(pois_preds) %>%
+  setNames(1:ncol(pois_preds)) %>%
+  pivot_longer(cols = everything()) %>%
+  mutate(name = as.numeric(name)) %>%
+  ggplot(aes(x = name, y = value, group = name)) +
+  geom_boxplot(aes(color = "Pred_stroke"), alpha = 0.5, outlier.shape = NA) +
+  geom_point(data = pois_means, aes(y = value, x = 1:ncol(pois_preds), fill = 'Pred_fill', color = "Pred_stroke"),
+             size = 3, stroke = 2, shape = 21) +
+  geom_point(data = Citibike_test, aes(y = Trip_count, x = 1:ncol(pois_preds), group = 1:ncol(pois_preds),
+             fill = 'Y_fill',  color = 'Y_stroke'), size = 2, shape = 21) +
+  scale_fill_manual(values = colors, guide = FALSE) +
+  scale_colour_manual(values = colors, labels = c(expression('y'[rep]), "y")) +
+  scale_y_continuous(limits = c(0, 180000), labels = NULL) +
+  labs(title = "",
+       subtitle = "",
+       x = 'Data point (index)',
+       y = NULL)
+
+# renew plot title
+gg_nb_pred <- gg_nb_pred +
+  labs(title = "Negative binomial (L) vs. poisson (R) out-of-sample performance",
+       x = 'Data point (index)',
+       y = NULL)
+
+gridExtra::grid.arrange(gg_nb_pred, gg_pois_pred, ncol = 2)
+```
+
+
+# Conclusion
+
+Between these two models the negative binomial is superior. Negative-binomial models allow the variance of the distribution to be larger than the mean. This is important in the Citi Bike data as it is over-dispersed: the mean is `r scales::comma(mean(Citibike$Trip_count))` and the variance `r scales::comma(var(Citibike$Trip_count))`. 
+
+Overall model performance is mediocre. The model captures much of the variation due to weather and day of the week. However, the RMSE of `r scales::comma(RMSE(nb_means$value, Citibike_test$Trip_count))` is rather large so it may not be an effective model in practice.
+
+
+\pagebreak
+
+# Appendix
+
+## Data characteristics
+
+The trip count is roughly normally distributed but slightly left-skewed distribution with a mean of `r scales::comma(mean(Citibike$Trip_count))`. There are more trips on weekdays and less for rainy days. It's positively correlated (`r round(cor(Citibike$Trip_count, Citibike$Temp), 2)`) with temperature, and negatively correlated (`r round(cor(Citibike$Trip_count, Citibike$Gust_speed), 2)`) with gust speed. Temperature is left skewed and gust speed is right skewed.
+  
+&nbsp;
+
+```{r EDA, echo=FALSE, fig.cap="Pairs plot of the data", fig.height=4, fig.width=5.5, message=FALSE, warning=FALSE}
+Citibike %>%
+  mutate(Weekday = as.factor(Weekday),
+         Precipitation = as.factor(Precipitation)) %>%
+  GGally::ggpairs(aes(alpha = 0.01)) +
+  theme(axis.text = element_text(size = 7),
+        axis.text.x = element_text(angle = 60, hjust = 1))
+```

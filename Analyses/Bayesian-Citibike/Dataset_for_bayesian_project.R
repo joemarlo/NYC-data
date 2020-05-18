@@ -64,12 +64,13 @@ weather <- tbl(conn, "Central.Park.weather") %>%
   collect() %>%
   mutate(Date = as_date(Date))
 
-# merge the two datasets
+# merge the two datasets and turn weekday and precip into booleans
 final_dataset <- daily_counts %>% 
   left_join(weather, by = "Date") %>% 
   ungroup() %>% 
   na.omit() %>% 
-  mutate(Weekday = as.numeric(Weekday)) %>% 
+  mutate(Weekday = as.numeric(Weekday),
+         Precipitation = as.numeric(Precipitation > 0.20)) %>% 
   select(-Date)
 
 # write out the dataset
