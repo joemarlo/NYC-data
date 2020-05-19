@@ -1,6 +1,6 @@
 # Final project for NYU Bayesian Inference
 
-A Bayesian approach to predicting Citibike ridership based on weather alone
+A Bayesian approach to predicting Citi Bike ridership using only simple predictors: weather and day of the week
 
 <br>
 
