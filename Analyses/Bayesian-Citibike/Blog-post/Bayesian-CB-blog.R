@@ -128,6 +128,7 @@ draws_long <- as.matrix(draws) %>%
 draws_long %>% 
   ggplot(aes(x = value)) +
   geom_density(color = blog_color) +
+  scale_y_continuous(labels = NULL) +
   facet_wrap(~name, scales = 'free') +
   labs(title = 'Densities of prior estimates',
        subtitle = '4,000 samples',
@@ -149,9 +150,10 @@ prior_mu %>%
             aes(x = x, y = y, label = label), hjust = c(1, 0), nudge_x = c(-0.1, 0.1),
             family = 'Helvetica') +
   scale_x_log10(labels = scales::comma) +
+  scale_y_continuous(labels = NULL) +
   labs(title = "Density of prior draws",
        subtitle = "4,000 samples",
-       x = NULL,
+       x = 'Predicted daily Citi Bike trips',
        y = NULL)
 save_plot('prior_draws')
 
@@ -187,6 +189,7 @@ as.matrix(post_nb) %>%
   ggplot() +
   geom_density(aes(x = value1), color = blog_color) +
   geom_density(aes(x = value), fill = blog_color, alpha = 0.6, color = 'white') +
+  scale_y_continuous(labels = NULL) +
   facet_wrap(~name, scales = 'free') +
   labs(title = 'Densities of posterior estimates',
        subtitle = '4,000 samples',
@@ -209,11 +212,14 @@ post_mu %>%
                           label = c('5th percentile', '95th percentile')),
             aes(x = x, y = y, label = label), hjust = c(1, 0), nudge_x = c(-0.05, 0.05),
             family = 'Helvetica') +
+  annotate(geom = 'text', x = 4000, y = 0.35,
+           label = 'prior draws', hjust = 1) +
   scale_x_log10(labels = scales::comma) +
+  scale_y_continuous(labels = NULL) +
   scale_fill_manual(name = 'Posterior draws') +
   labs(title = "Density of posterior draws",
        subtitle = "4,000 samples",
-       x = NULL,
+       x = 'Predicted daily Citi Bike trips',
        y = NULL)
 save_plot('posterior_draws')
 
@@ -226,7 +232,7 @@ Citibike %>%
   GGally::ggpairs(lower = list(continuous = GGally::wrap("smooth", colour = blog_color, alpha = 0.2))) +
   theme(axis.text = element_text(size = 7),
         axis.text.x = element_text(angle = 60, hjust = 1))
-save_plot('pairs', height = 5.5)
+save_plot('pairs', height = 6.5)
 
 
 
@@ -369,7 +375,6 @@ rbind(
   'rownames<-'(c('Negative binomial', 'Poisson')) %>%
   kable(digits = 0, format.args = list(big.mark = ",", scientific = FALSE)) %>% 
   kable_styling(bootstrap_options = c("hover", "responsive"))
-  pander(justify = 'right', caption = 'RMSE')
 
   
 colors <- c("Pred_fill" = "#d1e0eb", "Pred_stroke" = "#b3cddf", 
@@ -453,7 +458,7 @@ save_plot('Freq_preds', height = 4.5)
 
 # print RMSE for each model
 rbind(
-  RMSE(nb_freq_oos_preds, Citibike_test$Trip_count),
+  RMSE(nb_freq_oos_preds$fit, Citibike_test$Trip_count),
   RMSE(nb_means$value, Citibike_test$Trip_count),
   RMSE(pois_means$value, Citibike_test$Trip_count)
 ) %>%
@@ -463,6 +468,56 @@ rbind(
   'rownames<-'(c('Negative binomial - Frequentist', 'Negative binomial - Bayesian', 'Poisson - Bayesian')) %>%
   kable(digits = 0, format.args = list(big.mark = ",", scientific = FALSE)) %>% 
   kable_styling(bootstrap_options = c("hover", "responsive"))
+
+
+
+# perks of bayesian -------------------------------------------------------
+
+# Posterior probability of treatment effect > 0
+(prob_25 <- round(hypothesis(post_nb, "Weekday > 0.25")[["hypothesis"]][["Post.Prob"]], 2))
+
+p <- post_nb %>%
+  as_tibble() %>% 
+  ggplot(aes(x = b_Weekday)) +
+  geom_density()
+d <- ggplot_build(p)$data[[1]]
+vline <- 0.25
+p + 
+  geom_area(data = subset(d, x > vline), aes(x = x, y = y), fill = blog_color, alpha = 0.6) +
+  annotate('text', x = 0.245, y = 5, label = prob_25, hjust = -1, family = 'Helvetica') +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = NULL) + 
+  labs(title = 'Distribution of posterior weekday estimates',
+       x = NULL,
+       y = NULL)
+save_plot(name = 'weekday_probability')
+rm(p, d)
+
+
+# preds example
+preds_example <- posterior_predict(post_nb,
+                                   newdata = tibble(
+                                     Weekday = 0,
+                                     Precipitation = 1,
+                                     Temp = 60,
+                                     Gust_speed = 10
+                                   )) %>% as_tibble()
+p <- preds_example %>%
+  ggplot(aes(x = V1)) +
+  geom_density()
+d <- ggplot_build(p)$data[[1]]
+vline <- 40000
+p + 
+  geom_area(data = subset(d, x > vline), aes(x = x, y = y), fill = blog_color, alpha = 0.6) +
+  annotate('text', x = 41500, y = 0.000005, label = round(mean(preds_example$V1 > vline), 2), hjust = 0, family = 'Helvetica') +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = NULL) + 
+  labs(title = 'Density of samples from the posterior distribution',
+       subtitle = 'Rainy, 60F weekend day with a gust speed of 10mph',
+       x = 'Predicted daily Citi Bike trips',
+       y = NULL)
+save_plot(name = 'probability')
+rm(p, d)
 
 # se -> quantiles
 se1 <- 0.001
@@ -514,19 +569,21 @@ as_tibble(nb_preds) %>%
          type = factor(type, levels = c('Negative binomial - Frequentist', 'Negative binomial - Bayesian', 'Poisson - Bayesian'))) %>%
   ggplot(aes(x = reorder(name, fit))) +
   geom_hline(yintercept = 0) +
-  geom_point(aes(y = fit), fill = blog_color) +
   geom_errorbar(aes(ymin = lower3, ymax = upper3), color = blog_color, alpha = 0.3) +
   geom_errorbar(aes(ymin = lower2, ymax = upper2), color = blog_color, alpha = 0.6) +
   geom_errorbar(aes(ymin = lower1, ymax = upper1), color = blog_color, alpha = 0.9) +
+  geom_point(aes(y = fit), fill = blog_color) +
   scale_x_discrete(label = NULL) +
   facet_wrap(~type, ncol = 1) +
   coord_flip(ylim = c(-1, 3)) +
   labs(title = 'Relative prediction error of each method',
-       subtitle = 'Range represents approx. +/- 1, 2, 3 standard error',
+       subtitle = 'Frequentist range represents +/- 1, 2, 3 standard error\nBayesian range represents the 68.4%, 95.6%, 99.8% credible interval',
        x = 'Individual predictions',
-       y = '\nRelative error (prediction / Y - 1)\n0 represents perfect fit') +
+       y = expression(paste(plain('Relative error ('),
+                            hat(y),
+                            ' ',
+                            plain(' / y - 1)')))) +
   theme(panel.grid.major.y = element_line(color = NA),
         panel.grid.minor.x = element_line(color = 'grey95'))
 save_plot(name = 'relative_error', height = 10)
-
 
