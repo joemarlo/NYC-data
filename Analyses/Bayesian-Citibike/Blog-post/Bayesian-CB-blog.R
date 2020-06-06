@@ -404,7 +404,7 @@ gg_pois_pred <- as_tibble(pois_preds) %>%
 
 # renew plot title
 gg_nb_pred <- gg_nb_pred +
-  labs(title = "Neg. binom. (L) vs. poisson (R) out-of-sample performance",
+  labs(title = "Neg. binom. (L) vs. Poisson (R) out-of-sample performance",
        x = 'Data point (index)',
        y = 'Daily Citi Bike trips') +
   theme(plot.background = element_blank(),
