@@ -226,7 +226,7 @@ save_plot('posterior_draws')
 
 # pairs plot --------------------------------------------------------------
 
-Citibike %>%
+Citibike_train %>%
   mutate(Weekday = as.factor(Weekday),
          Precipitation = as.factor(Precipitation)) %>%
   GGally::ggpairs(lower = list(continuous = GGally::wrap("smooth", colour = blog_color, alpha = 0.2))) +
@@ -234,11 +234,10 @@ Citibike %>%
         axis.text.x = element_text(angle = 60, hjust = 1))
 save_plot('pairs', height = 6.5)
 
+scales::comma(mean(Citibike_train$Trip_count))
+round(cor(Citibike_train$Trip_count, Citibike_train$Temp), 2)
+round(cor(Citibike_train$Trip_count, Citibike_train$Gust_speed), 2)
 
-
-scales::comma(mean(Citibike$Trip_count))
-round(cor(Citibike$Trip_count, Citibike$Temp), 2)
-round(cor(Citibike$Trip_count, Citibike$Gust_speed), 2)
 
 # Evaluating the negative binomial model ----------------------------------
 nb_loo <- loo(post_nb)
