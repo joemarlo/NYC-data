@@ -353,7 +353,7 @@ pp_check(post_pois, type = "loo_intervals") +
   labs(title = 'Poisson in-sample performance',
        subtitle = paste0('Training dataset of ', nrow(Citibike_train), ' observations'),
        y = 'Daily Citi Bike trips')
-save_plot(name = 'Pois_preds', plot = gg_nb_pred, height = 4.5)
+save_plot(name = 'Pois_preds', height = 4.5)
 
 
 
