@@ -1,6 +1,6 @@
 # NYC-data
 
-The goal of this project is to pull together a database of the various NYC transportation options to ease and expedite future analyses. Currently, the database includes Citi Bike and subway data, and is approximately 20gb representing 140mm rows.
+A database of the various NYC transportation options built to ease and expedite future analyses. Currently, the database includes Citi Bike and subway data, and is approximately 20gb representing 140mm rows.
 
 `Create_database.R` creates the SQLite database of the Citi Bike, subway, and (eventually) taxi trip data. Shell scripts in each folder must be run first to download the data. Individual files to clean and analyze the data from the database are in the folders: [Citi-bike](Citi-bike), [Subway-turnstiles](Subway-turnstiles), [Taxi](Taxi).
 
@@ -25,6 +25,7 @@ turnstile.df <- tbl(conn, "turnstile.2019") %>% collect()
 - [Enumerating the economic and social shifts of March 2020](Analyses/COVID-impact)
   - [Blog post](http://marlo.works/posts/covid-impact/)
 - [A Bayesian approach to predicting Citibike ridership](Analyses/Bayesian-Citibike)
+  - [Blog post](https://www.marlo.works/posts/bayesian-citi-bike/)
 
 ## To-do list
 - [x] Build database core
