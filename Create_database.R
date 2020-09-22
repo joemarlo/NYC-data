@@ -63,7 +63,7 @@ read_subway_files <- function(year) {
 
 # read in the turnstile files to form the table and append subsequent files. 
 # final result is a database with tables for each year
-years.to.import <- 2014:2020
+years.to.import <- 2019:2020
 sapply(years.to.import, function(year) {
   # read in the files
   df <- read_subway_files(year = substr(as.character(year), 3, 4))
@@ -112,7 +112,7 @@ sapply(years.to.import, function(year) {
 dbListTables(conn)
 
 # test a query
-tbl(conn, "turnstile.2014") %>%
+tbl(conn, "turnstile.2020") %>%
   group_by(Source.file) %>%
   summarize(n.rows = n())
 

@@ -85,9 +85,11 @@ turnstile.df <- na.omit(turnstile.df)
 
 # duplicate name and station so we can keep the originals as join keys for later use
 turnstile.df <- turnstile.df %>%
-  bind_cols(turnstile.df[, c("Station", "Linename")]) %>%
-  rename(Old.station = Station1,
-         Old.linename = Linename1)
+  bind_cols(turnstile.df[, c("Station", "Linename")]) %>% 
+  rename(Old.station = Station...4,
+         Old.linename = Linename...5,
+         Station = Station...13,
+         Linename = Linename...14)
 
 
 # add lat long ------------------------------------------------------------
@@ -195,8 +197,9 @@ station.line.pairs <- lapply(1:nrow(station.line.pairs), function(index) {
 }) %>%
   bind_rows() %>%
   bind_cols(station.line.pairs, .) %>%
-  rename(New.name = Station1,
-         New.line = Line)
+  rename(New.name = Station...5,
+         New.line = Line,
+         Station = Station...3)
 
 # seems to still be some issues. the below 50 didn't match well (about 10% of total stations)
 # 34 st-herald sq
