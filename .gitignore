@@ -9,3 +9,4 @@ Subway-turnstiles/Data/turnstile*.txt
 Taxi/Data/*.csv
 .DS_Store
 *.db
+Analyses/COVID-neighborhoods/Data/

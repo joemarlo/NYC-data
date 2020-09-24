@@ -25,83 +25,6 @@ max.date.2019 <- as.Date("2019-09-21")
 min.date.2019 <- as.Date("2019-01-01")
 
 
-# data clean up-------------------------------------------------------------------------
-
-#only include "regular" and "recover audit" measurements. Others include maintenance checks
-turnstile.df <- turnstile.df %>% filter(Desc == "REGULAR" | Desc == "RECOVR AUD")
-
-# calculate the difference in Entries within each grouping of Booth and  SCP (SCP is a group of turnstiles within a station)
-# the goal here is the calculate the average difference in Entries for a given turnstile
-# this assumes turnstiles are in the same order each time the data is updated by the MTA
-# turnstile.df$diff <- ave(turnstile.df$Entries, turnstile.df$Booth, turnstile.df$SCP, FUN = function(x) c(0, diff(x)))
-turnstile.df <- turnstile.df %>%
-  group_by(Booth, SCP) %>%
-  mutate(Entries = Entries - lag(Entries),
-         Exits = Exits - lag(Exits))
-
-# summary stats
-summary(turnstile.df$Entries) %>% as.vector() %>% scales::comma()
-summary(turnstile.df$Exits) %>% as.vector() %>% scales::comma()
-
-# table of counts for given extreme breaks
-breaks <- c(-Inf, 0, 1000, 10000, 100000, Inf)
-hist(turnstile.df$Entries, breaks = breaks, plot = FALSE)$counts
-hist(turnstile.df$Exits, breaks = breaks, plot = FALSE)$counts
-
-# remove any negative counts
-turnstile.df <- turnstile.df[turnstile.df$Entries > 0,]
-turnstile.df <- turnstile.df[turnstile.df$Exits > 0,]
-
-# remove anything over 100,000
-# note: average daily ridership for the who system is 5.5mm
-turnstile.df <- turnstile.df[turnstile.df$Entries <= 100000,]
-turnstile.df <- turnstile.df[turnstile.df$Exits <= 100000,]
-
-# check again for outliers
-hist(turnstile.df$Entries, breaks = breaks, plot = FALSE)$counts
-hist(turnstile.df$Exits, breaks = breaks, plot = FALSE)$counts
-rm(breaks)
-
-# net entries and exits
-scales::percent((sum(turnstile.df$Entries, na.rm = TRUE) -
-                   sum(turnstile.df$Exits, na.rm = TRUE)) /
-                  sum(turnstile.df$Entries, na.rm = TRUE))
-
-# remove NA rows
-turnstile.df <- na.omit(turnstile.df)
-
-
-# Plots -------------------------------------------------------------------
-
-# daily ridership
-summ.ts <- turnstile.df %>%
-  filter(Date >= as.Date('2020-01-01')) %>%
-  group_by(Date) %>%
-  summarize(Daily.ridership = sum(Entries)) %>% 
-  rename(date = Date,
-         value = Daily.ridership)
-
-summ.ts %>%
-  ggplot(aes(x = date, y = value)) +
-  scale_y_continuous(labels = scales::comma) +
-  scale_x_date(date_breaks = "4 week", date_labels = "%b-%d") +
-  geom_line(color = '#2b7551') +
-  geom_point(color = '#2b7551') +
-  labs(title = 'Daily subway ridership drops significantly in March 2020',
-       x = NULL,
-       y = 'Daily ridership',
-       caption = 'Data: MTA turnstiles') +
-  light.theme +
-  theme(plot.caption = element_text(face = "italic",
-                                    size = 6,
-                                    color = 'grey50'))
-
-# ggsave('Plots/COVID_ridership.svg',
-#        device = 'svg',
-#        width = 9,
-#        height = 5)
-
-
 # all years ---------------------------------------------------------------
 
 # read all daily ridership into memory
@@ -193,14 +116,14 @@ turnstile.df %>%
   scale_fill_continuous(type = 'viridis', 
                         name = "Change in station entries\n",
                         labels = scales::percent_format(accuracy = 1),
-                        breaks = c(-0.95, -0.90, -0.85, -0.80)) +
+                        breaks = c(-0.95, -0.85, -0.75)) +
   geom_point(color = 'grey85', size = 0.4, alpha = 0.8) +
   scale_x_continuous(labels = NULL) +
   scale_y_continuous(labels = NULL) +
   coord_quickmap(xlim = c(-74.04, -73.79),
                  ylim = c(40.57, 40.88)) +
-  labs(title = "Decline in subway ridership: pre- and post-Covid",
-       subtitle = 'Color captures change in mean daily entries by station',
+  labs(title = "Decline in subway ridership: pre- vs. post-Covid",
+       subtitle = 'Color represents change in mean daily entries by station',
        caption = 'Jan 1-Mar 4 compared to Apr 6-Jun 14\nData: MTA turnstiles') +
   light.theme +
   theme(axis.title = element_blank(),
