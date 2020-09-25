@@ -14,3 +14,6 @@
 <img src="Plots/change_in_ridership_vs_income.png" width=70%>
 </p>
 
+<p align="center">
+<img src="Plots/essential_worker.png" width=55%>
+</p>

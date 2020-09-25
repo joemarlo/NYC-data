@@ -4,7 +4,17 @@ source("Analyses/COVID-neighborhoods/helper_functions.R")
 # 2018 5 year household NY file
 psam_h36 <- read_csv("Analyses/COVID-neighborhoods/Data/psam_h36.csv", 
                      col_types = cols(MHP = col_double()))
+psam_p36 <- read_csv("Analyses/COVID-neighborhoods/Data/psam_p36.csv", 
+                     col_types = cols(MHP = col_double()))
 
+# see what variables are available
+read_csv("~/Downloads/PUMS_Data_Dictionary_2014-2018.csv", 
+         col_names = FALSE) %>% 
+  group_by(X2) %>% 
+  filter(row_number() == 1) %>% 
+  select(Field = X2, Description = X5) %>% 
+  right_join(tibble(Field = colnames(psam_p36))) %>% 
+  View
 
 # ADJINC adjustment factor for income; six decimals
 # WGTP
@@ -96,33 +106,182 @@ psam_h36 %>%
   scale_fill_continuous(labels = scales::percent_format(),
                         name = "Smartphone ownership")
 
+# map of nyc PUMAs by Same-sex married couple households
+psam_h36 %>% 
+  filter(PUMA %in% nyc_PUMA_codes$PUMA) %>% 
+  mutate(Same_sex = SSMC %in% 1:2) %>% 
+  group_by(PUMA) %>% 
+  summarize(Same_sex = mean(Same_sex),
+            .groups = 'drop') %>%
+  right_join(nyc_PUMA_df, by = "PUMA") %>% 
+  ggplot() +
+  geom_polygon(aes(x = long, y = lat, group = group, fill = Same_sex),
+               color = 'white') +
+  coord_quickmap(xlim = c(-74.04, -73.79),
+                 ylim = c(40.57, 40.88)) +
+  scale_fill_continuous(labels = scales::percent_format(),
+                        name = "Same sex married couple")
+
+# map of nyc PUMAs by most common profession
+# get industry code mapping
+#https://coronavirus.delaware.gov/wp-content/uploads/sites/177/2020/04/DE-Industry-List-4.21.pdf
+raw <- pdftools::pdf_data('https://coronavirus.delaware.gov/wp-content/uploads/sites/177/2020/04/DE-Industry-List-4.21.pdf')
+
+# convert pdf data to dataframes containing just the NAICS code
+  # and essential worker status
+essential_jobs <- map_dfr(raw, function(tbl) {
+  tab <- tbl %>%
+    filter(grepl("[0-9]{4}", text) | grepl("^(Yes|No)$", text)) %>%
+    select(y, text)
+  
+  full_join(tab, tab, by = 'y') %>%
+    filter(text.x != text.y) %>%
+    distinct(y, .keep_all = TRUE) %>% 
+    mutate(Essential = text.y == 'Yes') %>% 
+    select(NAICS = text.x, Essential)
+})
+
+# add essential status
+# issue where with code mapping
+industry_code_mapping <- read_csv("~/Downloads/PUMS_Data_Dictionary_2014-2018.csv", 
+         col_names = FALSE) %>% 
+  filter(X2 == 'NAICSP') %>%
+  select(NAICSP = X5, Description = X7) %>% 
+  left_join(essential_jobs, by = c("NAICSP" = "NAICS")) %>% 
+  replace_na(list(Essential = FALSE))
+
+# map of % essential status
+psam_p36 %>% 
+  filter(PUMA %in% nyc_PUMA_codes$PUMA) %>% 
+  select(NAICSP, PUMA) %>% 
+  na.omit() %>% 
+  left_join(industry_code_mapping, by = 'NAICSP') %>% 
+  group_by(PUMA) %>% 
+  summarize(Mean_essential = mean(Essential),
+            .groups = 'drop') %>%
+  right_join(nyc_PUMA_df, by = "PUMA") %>% 
+  ggplot() +
+  geom_polygon(aes(x = long, y = lat, group = group, fill = Mean_essential),
+               color = 'white') +
+  coord_quickmap(xlim = c(-74.04, -73.79),
+                 ylim = c(40.57, 40.88)) +
+  scale_fill_continuous(labels = scales::percent_format(accuracy = 1),
+                        name = "Essential worker status\n",
+                        breaks = c(0.20, 0.25, 0.30)) +
+  scale_x_continuous(labels = NULL) +
+  scale_y_continuous(labels = NULL) +
+  labs(title = "Average essential worker status",
+       subtitle = "Unweighted",
+       caption = 'Data: American Community Survey 2018 5-Year estimates\nDelaware essential industry list') +
+  theme(axis.title = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_blank(),
+        legend.position = 'bottom',
+        plot.caption = element_text(face = "italic",
+                                    size = 6,
+                                    color = 'grey50'))
+# ggsave(filename = "Analyses/COVID-neighborhoods/Plots/essential_worker.png",
+#        device = 'png',
+#        height = 10,
+#        width = 5.5)
+
+
+# map of most common industries
+psam_p36 %>% 
+  filter(PUMA %in% nyc_PUMA_codes$PUMA) %>% 
+  select(NAICSP, PUMA) %>% 
+  na.omit() %>% 
+  left_join(industry_code_mapping, by = 'NAICSP') %>% 
+  group_by(PUMA) %>% 
+  summarize(Mode_industry = names(rev(sort(table(substr(Description, 0, 3)))))[[1]],
+            .groups = 'drop') %>%
+  right_join(nyc_PUMA_df, by = "PUMA") %>% 
+  ggplot() +
+  geom_polygon(aes(x = long, y = lat, group = group, fill = Mode_industry),
+               color = 'white') +
+  coord_quickmap(xlim = c(-74.04, -73.79),
+                 ylim = c(40.57, 40.88)) +
+  scale_fill_discrete(name = "Most common industry of residents")
+
+
+# map of nyc PUMAs by most transportation to work
+# get  code mapping
+read_csv("~/Downloads/PUMS_Data_Dictionary_2014-2018.csv", 
+                                  col_names = FALSE) %>% 
+  filter(X2 == 'JWTR') %>%
+  select(JWTR = X5, Description = X7)
+psam_p36 %>% 
+  filter(PUMA %in% nyc_PUMA_codes$PUMA) %>% 
+  group_by(PUMA) %>% 
+  summarize(Mean_subway = mean(JWTR == '04', na.rm = TRUE),
+            .groups = 'drop') %>%
+  right_join(nyc_PUMA_df, by = "PUMA") %>% 
+  ggplot() +
+  geom_polygon(aes(x = long, y = lat, group = group, fill = Mean_subway),
+               color = 'white') +
+  coord_quickmap(xlim = c(-74.04, -73.79),
+                 ylim = c(40.57, 40.88)) +
+  scale_fill_continuous(labels = scales::percent_format(),
+                        name = "Subway as primary mode to work")
+
+# time to leave home for work
+time_mapping <- read_csv("~/Downloads/PUMS_Data_Dictionary_2014-2018.csv",
+                               col_names = FALSE) %>%
+  filter(X2 == 'JWDP') %>%
+  select(JWDP = X5, Description = X7) %>%
+  filter(row_number() > 2) %>% 
+  mutate(time = str_extract(Description, "^(.+?)m."),
+         time = str_replace(time, pattern = "a.m.", "am"),
+         time = str_replace(time, pattern = "p.m.", "pm")) %>% 
+  rowwise() %>% 
+  mutate(time = lubridate::parse_date_time(time, "%I:%M %p"),
+         time = as_hms(time),
+         time = as.numeric(time) / (60 * 60)) %>% 
+  ungroup()
+psam_p36 %>% 
+  filter(PUMA %in% nyc_PUMA_codes$PUMA,
+         JWDP != 'bbb') %>%
+  select(PUMA, JWDP) %>% 
+  mutate(JWDP = str_remove(JWDP, "^0+")) %>% 
+  left_join(time_mapping, by = "JWDP") %>% 
+  group_by(PUMA) %>% 
+  summarize(Mean_time = mean(time, na.rm = TRUE),
+            .groups = 'drop') %>%
+  right_join(nyc_PUMA_df, by = "PUMA") %>% 
+  ggplot() +
+  geom_polygon(aes(x = long, y = lat, group = group, fill = Mean_time),
+               color = 'white') +
+  coord_quickmap(xlim = c(-74.04, -73.79),
+                 ylim = c(40.57, 40.88)) +
+  scale_fill_continuous(name = "Mean time leaving for work")
+
 
 # which stations are in each PUMA -----------------------------------------
 
-# test the in polygon method
-turnstile.df %>% 
-  filter(Station == 'BEDFORD AV') %>% 
-  head(1) %>% 
-  ggplot(aes(x = Long, y = Lat)) +
-  geom_polygon(data = nyc.df,
-               aes(x = long, y = lat, group = group),
-               fill = "gray50") +
-  geom_point(color = 'grey20') +
-  coord_quickmap(xlim = c(-74.05, -73.9),
-                 ylim = c(40.65, 40.82))
-
-test_point <- turnstile.df %>% 
-  ungroup() %>% 
-  filter(Station == 'BEDFORD AV') %>% 
-  head(1) %>% 
-  select(Lat, Long)
-
-test_poly <- nyc_PUMA_df %>% 
-  filter(PUMA == '04001')
-
-# test if the point is the polygon
-sp::point.in.polygon(point.x = test_point$Long, point.y = test_point$Lat,
-                     pol.x = test_poly$long, pol.y = test_poly$lat)
+# test the in-polygon method
+# turnstile.df %>% 
+#   filter(Station == 'BEDFORD AV') %>% 
+#   head(1) %>% 
+#   ggplot(aes(x = Long, y = Lat)) +
+#   geom_polygon(data = nyc.df,
+#                aes(x = long, y = lat, group = group),
+#                fill = "gray50") +
+#   geom_point(color = 'grey20') +
+#   coord_quickmap(xlim = c(-74.05, -73.9),
+#                  ylim = c(40.65, 40.82))
+# 
+# test_point <- turnstile.df %>% 
+#   ungroup() %>% 
+#   filter(Station == 'BEDFORD AV') %>% 
+#   head(1) %>% 
+#   select(Lat, Long)
+# 
+# test_poly <- nyc_PUMA_df %>% 
+#   filter(PUMA == '04001')
+# 
+# # test if the point is the polygon
+# sp::point.in.polygon(point.x = test_point$Long, point.y = test_point$Lat,
+#                      pol.x = test_poly$long, pol.y = test_poly$lat)
 
 # create a df with each row as a PUMA with a nest df of the polygon xy vectors
 nested_polys <- nyc_PUMA_df %>% 
