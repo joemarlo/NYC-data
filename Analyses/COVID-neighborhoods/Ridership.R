@@ -1,8 +1,7 @@
-library(tidyverse)
+source("Analyses/COVID-neighborhoods/helper_functions.R")
 library(hms)
 library(lubridate)
 library(RSQLite)
-source('Plots/ggplot-theme.R')
 
 # connect to database and read in data to memory --------------------------
 
@@ -125,7 +124,6 @@ turnstile.df %>%
   labs(title = "Decline in subway ridership: pre- vs. post-Covid",
        subtitle = 'Color represents change in mean daily entries by station',
        caption = 'Jan 1-Mar 4 compared to Apr 6-Jun 14\nData: MTA turnstiles') +
-  light.theme +
   theme(axis.title = element_blank(),
         panel.grid.major.x = element_blank(),
         panel.grid.major.y = element_blank(),
