@@ -19,5 +19,5 @@
 </p>
 
 <p align="center">
-<img src="Plots/essential_vs_ridership.png" width=70%>
+<img src="Plots/essential_vs_ridership.png" width=90%>
 </p>
