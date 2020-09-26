@@ -172,7 +172,7 @@ psam_p36 %>%
   scale_y_continuous(labels = NULL) +
   labs(title = "Average essential worker status",
        subtitle = "Unweighted",
-       caption = 'Data: American Community Survey 2018 5-Year estimates\nDelaware essential industry list') +
+       caption = 'American Community Survey 2018 5-Year estimates\nDelaware essential industry list') +
   theme(axis.title = element_blank(),
         panel.grid.major.x = element_blank(),
         panel.grid.major.y = element_blank(),
@@ -429,3 +429,38 @@ psam_h36 %>%
 #        device = 'png',
 #        height = 5,
 #        width = 7)
+
+# essential worker vs. ridership
+psam_p36 %>% 
+  filter(PUMA %in% nyc_PUMA_codes$PUMA) %>% 
+  select(NAICSP, PUMA) %>% 
+  na.omit() %>% 
+  left_join(industry_code_mapping, by = 'NAICSP') %>% 
+  group_by(PUMA) %>% 
+  summarize(Mean_essential = mean(Essential),
+            .groups = 'drop') %>% 
+  left_join(ridership_drop_by_PUMA, by = "PUMA") %>%
+  left_join(income_pt_est, by = "PUMA") %>% 
+  left_join(distinct(nyc_PUMA_df[, c('PUMA', 'Borough')]), by = "PUMA") %>% 
+  filter(Borough != "Staten Island") %>% 
+  ggplot(aes(x = Mean_essential, y = ridership_change, size = mean_income, color = Borough)) +
+  geom_point(alpha = 0.7) +
+  facet_wrap(~Borough) +
+  geom_smooth(method = 'lm', se = TRUE, alpha = 0.1, color = NA) +
+  geom_line(stat = "smooth", method = 'lm', alpha = 0.3, size = 1) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_color_discrete(guide = FALSE) +
+  scale_size_continuous(name = "Mean income",
+                        labels = scales::dollar_format()) +
+  guides(size = guide_legend(override.aes = list(fill = NA))) +
+  labs(title = "Essential worker status vs. decline in subway ridership",
+       subtitle = 'Data aggregated on the Public Use Microdata Area (PUMA) level',
+       caption = 'Jan 1-Mar 4 compared to Apr 6-Jun 14\nData: MTA turnstiles, American Community Survey, Delaware essential industry list',
+       x = "% of workers deemed essential",
+       y = "Ridership change")
+# ggsave(filename = "Analyses/COVID-neighborhoods/Plots/essential_vs_ridership.png",
+#        device = 'png',
+#        height = 7,
+#        width = 10)
+

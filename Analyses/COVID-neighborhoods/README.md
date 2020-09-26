@@ -17,3 +17,7 @@
 <p align="center">
 <img src="Plots/essential_worker.png" width=55%>
 </p>
+
+<p align="center">
+<img src="Plots/essential_vs_ridership.png" width=70%>
+</p>
