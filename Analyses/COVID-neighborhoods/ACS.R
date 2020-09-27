@@ -78,12 +78,10 @@ psam_h36 %>%
   scale_x_continuous(labels = NULL) +
   scale_y_continuous(labels = NULL) +
   labs(title = "Mean household income",
-       subtitle = "",
        caption = 'American Community Survey 2018 5-Year estimates\n',
        x = NULL,
        y = NULL) +
   theme(legend.position = 'bottom')
-  
 # ggsave(filename = "Analyses/COVID-neighborhoods/Plots/income.svg",
 #        device = 'svg',
 #        height = 10,
@@ -167,11 +165,11 @@ industry_code_mapping <- read_csv("~/Downloads/PUMS_Data_Dictionary_2014-2018.cs
 # map of % essential status
 psam_p36 %>% 
   filter(PUMA %in% nyc_PUMA_codes$PUMA) %>% 
-  select(NAICSP, PUMA) %>% 
+  select(NAICSP, PUMA, PWGTP) %>% 
   na.omit() %>% 
   left_join(industry_code_mapping, by = 'NAICSP') %>% 
   group_by(PUMA) %>% 
-  summarize(Mean_essential = mean(Essential),
+  summarize(Mean_essential = sum(Essential * PWGTP) / sum(PWGTP, na.rm = TRUE),
             .groups = 'drop') %>%
   right_join(nyc_PUMA_df, by = "PUMA") %>% 
   ggplot() +
@@ -185,15 +183,11 @@ psam_p36 %>%
   scale_x_continuous(labels = NULL) +
   scale_y_continuous(labels = NULL) +
   labs(title = "Mean essential worker status",
-       subtitle = "Unweighted",
        caption = 'American Community Survey 2018 5-Year estimates\nDelaware essential industry list') +
   theme(axis.title = element_blank(),
         panel.grid.major.x = element_blank(),
         panel.grid.major.y = element_blank(),
-        legend.position = 'bottom',
-        plot.caption = element_text(face = "italic",
-                                    size = 6,
-                                    color = 'grey50'))
+        legend.position = 'bottom')
 # ggsave(filename = "Analyses/COVID-neighborhoods/Plots/essential_worker.svg",
 #        device = 'svg',
 #        height = 10,
@@ -471,11 +465,11 @@ ggsave(filename = "Analyses/COVID-neighborhoods/Plots/change_in_ridership_vs_inc
 # essential worker vs. ridership
 essential_worker <- psam_p36 %>% 
   filter(PUMA %in% nyc_PUMA_codes$PUMA) %>% 
-  select(NAICSP, PUMA) %>% 
+  select(NAICSP, PUMA, PWGTP) %>% 
   na.omit() %>% 
   left_join(industry_code_mapping, by = 'NAICSP') %>% 
   group_by(PUMA) %>% 
-  summarize(Mean_essential = mean(Essential),
+  summarize(Mean_essential = sum(Essential * PWGTP) / sum(PWGTP, na.rm = TRUE),
             .groups = 'drop') %>% 
   left_join(ridership_drop_by_PUMA, by = "PUMA") %>%
   left_join(income_pt_est, by = "PUMA") %>% 
@@ -494,10 +488,10 @@ essential_worker %>%
        caption = 'Jan 1-Mar 4 compared to Apr 6-Jun 14\nData: MTA turnstiles, American Community Survey, Delaware essential industry list',
        x = "% of workers deemed essential",
        y = "Ridership change")
-ggsave(filename = "Analyses/COVID-neighborhoods/Plots/essential_vs_ridership.svg",
-       device = 'svg',
-       height = 7,
-       width = 6)
+# ggsave(filename = "Analyses/COVID-neighborhoods/Plots/essential_vs_ridership.svg",
+#        device = 'svg',
+#        height = 7,
+#        width = 6)
 
 essential_worker %>% 
   ggplot(aes(x = Mean_essential, y = ridership_change, color = Borough)) +
@@ -513,7 +507,7 @@ essential_worker %>%
        x = "% of workers deemed essential",
        y = "Ridership change") +
   theme(legend.position = 'none')
-ggsave(filename = "Analyses/COVID-neighborhoods/Plots/essential_vs_ridership_borough.svg",
-       device = 'svg',
-       height = 7,
-       width = 6)
+# ggsave(filename = "Analyses/COVID-neighborhoods/Plots/essential_vs_ridership_borough.svg",
+#        device = 'svg',
+#        height = 7,
+#        width = 6)
