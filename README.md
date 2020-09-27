@@ -26,6 +26,8 @@ turnstile.df <- tbl(conn, "turnstile.2019") %>% collect()
   - [Blog post](http://marlo.works/posts/covid-impact/)
 - [A Bayesian approach to predicting Citibike ridership](Analyses/Bayesian-Citibike)
   - [Blog post](https://www.marlo.works/posts/bayesian-citi-bike/)
+- [Inequities in the fall of NYC subway ridership](Analyses/COVID-nieghborhoods)
+  - [Blog post](https://www.marlo.works/posts/covid-nyc-ridership/)
 
 ## To-do list
 - [x] Build database core
