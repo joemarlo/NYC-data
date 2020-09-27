@@ -69,11 +69,25 @@ psam_h36 %>%
   right_join(nyc_PUMA_df, by = "PUMA") %>% 
   ggplot() +
   geom_polygon(aes(x = long, y = lat, group = group, fill = mean_income),
-               color = 'white') +
+               color = 'white', alpha = 0.85) +
   coord_quickmap(xlim = c(-74.04, -73.79),
                  ylim = c(40.57, 40.88)) +
-  scale_fill_continuous(labels = scales::dollar_format(),
-                        name = "Mean household income")
+  scale_fill_continuous(labels = scales::dollar_format(scale = 1 / 1e3, suffix = "k", accuracy = 1),
+                        name = "Household income\n",
+                        breaks = c(40000, 100000, 160000)) +
+  scale_x_continuous(labels = NULL) +
+  scale_y_continuous(labels = NULL) +
+  labs(title = "Mean household income",
+       subtitle = "",
+       caption = 'American Community Survey 2018 5-Year estimates\n',
+       x = NULL,
+       y = NULL) +
+  theme(legend.position = 'bottom')
+  
+# ggsave(filename = "Analyses/COVID-neighborhoods/Plots/income.svg",
+#        device = 'svg',
+#        height = 10,
+#        width = 5.5)
 
 # map of nyc PUMAs by rent as % of income
 psam_h36 %>% 
@@ -162,7 +176,7 @@ psam_p36 %>%
   right_join(nyc_PUMA_df, by = "PUMA") %>% 
   ggplot() +
   geom_polygon(aes(x = long, y = lat, group = group, fill = Mean_essential),
-               color = 'white') +
+               color = 'white', alpha = 0.85) +
   coord_quickmap(xlim = c(-74.04, -73.79),
                  ylim = c(40.57, 40.88)) +
   scale_fill_continuous(labels = scales::percent_format(accuracy = 1),
@@ -170,7 +184,7 @@ psam_p36 %>%
                         breaks = c(0.20, 0.25, 0.30)) +
   scale_x_continuous(labels = NULL) +
   scale_y_continuous(labels = NULL) +
-  labs(title = "Average essential worker status",
+  labs(title = "Mean essential worker status",
        subtitle = "Unweighted",
        caption = 'American Community Survey 2018 5-Year estimates\nDelaware essential industry list') +
   theme(axis.title = element_blank(),
@@ -180,8 +194,8 @@ psam_p36 %>%
         plot.caption = element_text(face = "italic",
                                     size = 6,
                                     color = 'grey50'))
-# ggsave(filename = "Analyses/COVID-neighborhoods/Plots/essential_worker.png",
-#        device = 'png',
+# ggsave(filename = "Analyses/COVID-neighborhoods/Plots/essential_worker.svg",
+#        device = 'svg',
 #        height = 10,
 #        width = 5.5)
 
@@ -359,7 +373,7 @@ ridership_drop_by_PUMA %>%
   right_join(nyc_PUMA_df, by = "PUMA") %>% 
   ggplot() +
   geom_polygon(aes(x = long, y = lat, group = group, fill = ridership_change),
-               color = 'white') +
+               color = 'white', alpha = 0.85) +
   geom_point(data = point_poly_df,
              aes(x = station_long, y = station_lat), 
              color = 'grey90', size = 0.4, alpha = 0.9) +
@@ -381,8 +395,8 @@ ridership_drop_by_PUMA %>%
         plot.caption = element_text(face = "italic",
                                     size = 6,
                                     color = 'grey50'))
-# ggsave(filename = "Plots/change_in_ridership_by_PUMA.png",
-#        device = 'png',
+# ggsave(filename = "Analyses/COVID-neighborhoods/Plots/change_in_ridership_by_PUMA.svg",
+#        device = 'svg',
 #        height = 10,
 #        width = 5.5)
 
@@ -397,7 +411,7 @@ income_pt_est <- psam_h36 %>%
 
 # calc standard error for income by PUMA
   # and then plot against ridership change
-psam_h36 %>% 
+income_range <- psam_h36 %>% 
   filter(PUMA %in% nyc_PUMA_codes$PUMA) %>% 
   select(PUMA, HINCP, starts_with("WGTP")) %>% 
   rename(Weight = WGTP) %>% 
@@ -410,28 +424,52 @@ psam_h36 %>%
   mutate(low = mean_income - conf_int, high = mean_income + conf_int) %>% 
   left_join(ridership_drop_by_PUMA, by = "PUMA") %>%
   left_join(distinct(nyc_PUMA_df[, c('PUMA', 'Borough')]), by = "PUMA") %>% 
-  filter(Borough != "Staten Island") %>% 
-  ggplot(aes(x = mean_income, y = ridership_change, color = Borough,
+  filter(Borough != "Staten Island")
+income_range %>% 
+  ggplot(aes(x = mean_income, y = ridership_change,
              xmin = low, xmax = high)) +
-  geom_point() +
-  geom_linerange() +
+  geom_linerange(color = 'grey30') +
+  geom_point(color = 'grey30') +
+  geom_smooth(method = 'lm', se = TRUE, alpha = 0.1, color = NA, formula = y ~ x + I(log(x))) +
+  geom_line(stat = "smooth", method = 'lm', alpha = 0.3, size = 1, formula = y ~ x + I(log(x))) +
   scale_x_continuous(labels = scales::dollar_format()) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   scale_color_discrete(name = element_blank()) +
   guides(color = guide_legend(override.aes = list(linetype = 0))) +
-  labs(title = "Mean household income vs. decline in subway ridership",
+  labs(title = "Income vs. decline in subway ridership",
+       subtitle = 'Data aggregated on the Public Use Microdata Area (PUMA) level\nRange represents 95% confidence interval of household income',
+       caption = 'Jan 1-Mar 4 compared to Apr 6-Jun 14\nData: MTA turnstiles, American Community Survey',
+       x = "Mean household income",
+       y = "Ridership change")
+ggsave(filename = "Analyses/COVID-neighborhoods/Plots/change_in_ridership_vs_income.svg",
+       device = 'svg',
+       height = 7,
+       width = 6)
+
+income_range %>% 
+  ggplot(aes(x = mean_income, y = ridership_change,
+             xmin = low, xmax = high, color = Borough)) +
+  geom_linerange() +
+  geom_point() +
+  geom_smooth(method = 'lm', se = TRUE, alpha = 0.1, color = NA, formula = y ~ x + I(log(x))) +
+  geom_line(stat = "smooth", method = 'lm', alpha = 0.3, size = 1, formula = y ~ x + I(log(x))) +
+  scale_x_continuous(labels = scales::dollar_format()) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  facet_wrap(~Borough) + 
+  guides(color = guide_legend(override.aes = list(linetype = 0))) +
+  labs(title = "Income vs. decline in subway ridership",
        subtitle = 'Data aggregated on the Public Use Microdata Area (PUMA) level\nRange represents 95% confidence interval of household income',
        caption = 'Jan 1-Mar 4 compared to Apr 6-Jun 14\nData: MTA turnstiles, American Community Survey',
        x = "Mean household income",
        y = "Ridership change") +
-  theme(legend.position = 'bottom')
-# ggsave(filename = "Plots/change_in_ridership_vs_income.png",
-#        device = 'png',
-#        height = 5,
-#        width = 7)
+  theme(legend.position = 'none')
+ggsave(filename = "Analyses/COVID-neighborhoods/Plots/change_in_ridership_vs_income_borough.svg",
+       device = 'svg',
+       height = 7,
+       width = 6)
 
 # essential worker vs. ridership
-psam_p36 %>% 
+essential_worker <- psam_p36 %>% 
   filter(PUMA %in% nyc_PUMA_codes$PUMA) %>% 
   select(NAICSP, PUMA) %>% 
   na.omit() %>% 
@@ -442,25 +480,40 @@ psam_p36 %>%
   left_join(ridership_drop_by_PUMA, by = "PUMA") %>%
   left_join(income_pt_est, by = "PUMA") %>% 
   left_join(distinct(nyc_PUMA_df[, c('PUMA', 'Borough')]), by = "PUMA") %>% 
-  filter(Borough != "Staten Island") %>% 
-  ggplot(aes(x = Mean_essential, y = ridership_change, size = mean_income, color = Borough)) +
+  filter(Borough != "Staten Island")
+
+essential_worker %>% 
+  ggplot(aes(x = Mean_essential, y = ridership_change)) +
   geom_point(alpha = 0.7) +
-  facet_wrap(~Borough) +
   geom_smooth(method = 'lm', se = TRUE, alpha = 0.1, color = NA) +
   geom_line(stat = "smooth", method = 'lm', alpha = 0.3, size = 1) +
   scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  scale_color_discrete(guide = FALSE) +
-  scale_size_continuous(name = "Mean income",
-                        labels = scales::dollar_format()) +
-  guides(size = guide_legend(override.aes = list(fill = NA))) +
   labs(title = "Essential worker status vs. decline in subway ridership",
        subtitle = 'Data aggregated on the Public Use Microdata Area (PUMA) level',
        caption = 'Jan 1-Mar 4 compared to Apr 6-Jun 14\nData: MTA turnstiles, American Community Survey, Delaware essential industry list',
        x = "% of workers deemed essential",
        y = "Ridership change")
-# ggsave(filename = "Analyses/COVID-neighborhoods/Plots/essential_vs_ridership.png",
-#        device = 'png',
-#        height = 7,
-#        width = 10)
+ggsave(filename = "Analyses/COVID-neighborhoods/Plots/essential_vs_ridership.svg",
+       device = 'svg',
+       height = 7,
+       width = 6)
 
+essential_worker %>% 
+  ggplot(aes(x = Mean_essential, y = ridership_change, color = Borough)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = 'lm', se = TRUE, alpha = 0.1, color = NA) +
+  geom_line(stat = "smooth", method = 'lm', alpha = 0.3, size = 1) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  facet_wrap(~Borough) +
+  labs(title = "Essential worker status vs. decline in subway ridership",
+       subtitle = 'Data aggregated on the Public Use Microdata Area (PUMA) level',
+       caption = 'Jan 1-Mar 4 compared to Apr 6-Jun 14\nData: MTA turnstiles, American Community Survey, Delaware essential industry list',
+       x = "% of workers deemed essential",
+       y = "Ridership change") +
+  theme(legend.position = 'none')
+ggsave(filename = "Analyses/COVID-neighborhoods/Plots/essential_vs_ridership_borough.svg",
+       device = 'svg',
+       height = 7,
+       width = 6)

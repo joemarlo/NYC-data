@@ -89,10 +89,8 @@ daily_summary %>%
            fill = '#394E48',
            label = paste0(scales::percent_format()(post_mean / pre_mean -1), 
                           ' drop in mean ridership'),
-           color = 'white',
-           size = 4,
-           label.size = 1.25,
-           label.padding = unit(0.75, "lines")) +
+           color = 'white', size = 4, family = 'helvetica',
+           label.size = 1.25, label.padding = unit(0.75, "lines")) +
   scale_x_date(date_breaks = "1 month", date_labels = '%b') +
   scale_y_continuous(labels = scales::label_number(scale = 1 / 1e6, suffix = "M", accuracy = 1)) +
   labs(title = "Resulting in a substantial drop in the mean ridership",
@@ -163,12 +161,12 @@ change_in_ridership <- turnstile.df %>%
   select(-pre_covid)
 
 # write out dataframe to use with Mapbox
-ridership_geojson <- change_in_ridership
-coordinates(ridership_geojson) <- c("Long", "Lat")
-rgdal::writeOGR(obj = ridership_geojson, 
-                layer = "ridership_geojson",
-                dsn = "Analyses/COVID-neighborhoods/Data/change_in_ridership.GeoJSON",
-                driver = "GeoJSON")
+# ridership_geojson <- change_in_ridership
+# coordinates(ridership_geojson) <- c("Long", "Lat")
+# rgdal::writeOGR(obj = ridership_geojson, 
+#                 layer = "ridership_geojson",
+#                 dsn = "Analyses/COVID-neighborhoods/Data/change_in_ridership.GeoJSON",
+#                 driver = "GeoJSON")
 
 # veroni heat map of change in subway ridership
 change_in_ridership %>% 
@@ -198,8 +196,8 @@ change_in_ridership %>%
         plot.caption = element_text(face = "italic",
                                     size = 6,
                                     color = 'grey50'))
-# ggsave(filename = "Plots/change_in_ridership.png",
-#        device = 'png',
+# ggsave(filename = "Plots/change_in_ridership.svg",
+#        device = 'svg',
 #        height = 10,
 #        width = 5.5)
 
