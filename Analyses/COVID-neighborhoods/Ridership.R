@@ -49,12 +49,67 @@ for (i in tables) {
   gc()
 }
 
+# plot of ridership over time
+daily_summary <- turnstile.df %>% 
+  filter(Date >= as.Date("2020-01-01"),
+         Date <= as.Date("2020-06-14")) %>% 
+  group_by(Date) %>% 
+  summarize(ridership = sum(Daily.ridership),
+            .groups = 'drop')
+daily_summary %>% 
+  ggplot(aes(x = Date, y = ridership)) +
+  geom_point(color = "#2b7551") +
+  geom_line(color = "#2b7551") +
+  scale_x_date(date_breaks = "1 month", date_labels = '%b') +
+  scale_y_continuous(labels = scales::label_number(scale = 1 / 1e6, suffix = "M", accuracy = 1)) +
+  labs(title = "Daily subway ridership drops significantly in March 2020",
+       x = NULL,
+       y = NULL)
+# ggsave(filename = "Analyses/COVID-neighborhoods/Plots/ridership_timeseries.svg",
+#        device = 'svg',
+#        height = 4,
+#        width = 8)
+
+pre_mean <- daily_summary %>% filter(Date <= as.Date("2020-03-04")) %>% pull(ridership) %>% mean()
+post_mean <- daily_summary %>% filter(Date >= as.Date("2020-4-06")) %>% pull(ridership) %>% mean()
+
+daily_summary %>% 
+  ggplot(aes(x = Date, y = ridership)) +
+  geom_point(color = "grey50", alpha = 0.3) +
+  geom_line(color = "grey50", alpha = 0.3) +
+  geom_segment(aes(x = as.Date("2020-01-01"), xend = as.Date("2020-03-04"),
+                 y = pre_mean, yend = pre_mean), color = '#2b7551', size = 1.5) +
+  geom_segment(aes(x = as.Date("2020-04-06"), xend = as.Date("2020-06-14"),
+                   y = post_mean, yend = post_mean), color = '#2b7551', size = 1.5) +
+  geom_curve(aes(x =  as.Date("2020-02-25"), y = pre_mean * 1.05,
+                 xend = as.Date("2020-04-15"), yend = post_mean * 1.4),
+             curvature = -0.65, color = '#394E48', size = 1,
+             arrow = arrow(type = 'closed', length = unit(0.4, "cm"))) +
+  annotate("label", x =  as.Date("2020-05-06"), y = 4500000, 
+           fill = '#394E48',
+           label = paste0(scales::percent_format()(post_mean / pre_mean -1), 
+                          ' drop in mean ridership'),
+           color = 'white',
+           size = 4,
+           label.size = 1.25,
+           label.padding = unit(0.75, "lines")) +
+  scale_x_date(date_breaks = "1 month", date_labels = '%b') +
+  scale_y_continuous(labels = scales::label_number(scale = 1 / 1e6, suffix = "M", accuracy = 1)) +
+  labs(title = "Resulting in a substantial drop in the mean ridership",
+       x = NULL,
+       y = NULL)
+# ggsave(filename = "Analyses/COVID-neighborhoods/Plots/ridership_timeseries_bars.svg",
+#        device = 'svg',
+#        height = 4,
+#        width = 8)
 
 # match with lat long -----------------------------------------------------
 
 # add lat long from database
 turnstile.df <- turnstile.df %>%
-  left_join(tbl(conn, "station.lat.long"), by = c("Station", "Linename"), copy = TRUE)
+  left_join(tbl(conn, "station.lat.long"), 
+            by = c("Station", "Linename"), 
+            copy = TRUE)
 
 
 # maps --------------------------------------------------------------------
@@ -83,8 +138,8 @@ tbl(conn, "station.lat.long") %>%
   coord_quickmap(xlim = c(-74.05, -73.9),
                  ylim = c(40.65, 40.82))
 
-# veroni heat map of change in subway ridership
-turnstile.df %>% 
+# create df of change in ridership between pre and post covid
+change_in_ridership <- turnstile.df %>% 
   group_by(Date, Lat, Long) %>% 
   summarize(Daily.ridership = sum(Daily.ridership),
             .groups = 'drop') %>%
@@ -104,7 +159,19 @@ turnstile.df %>%
   ungroup() %>% 
   na.omit() %>% 
   filter(ridership_change > stats::quantile(ridership_change, probs = 0.025),
-         ridership_change < stats::quantile(ridership_change, probs = 0.975)) %>%
+         ridership_change < stats::quantile(ridership_change, probs = 0.975)) %>% 
+  select(-pre_covid)
+
+# write out dataframe to use with Mapbox
+ridership_geojson <- change_in_ridership
+coordinates(ridership_geojson) <- c("Long", "Lat")
+rgdal::writeOGR(obj = ridership_geojson, 
+                layer = "ridership_geojson",
+                dsn = "Analyses/COVID-neighborhoods/Data/change_in_ridership.GeoJSON",
+                driver = "GeoJSON")
+
+# veroni heat map of change in subway ridership
+change_in_ridership %>% 
   ggplot(aes(x = Long, y = Lat)) +
   geom_polygon(data = nyc.df,
                aes(x = long, y = lat, group = group),
