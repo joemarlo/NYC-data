@@ -540,3 +540,33 @@ rgdal::writeOGR(obj = nyc_PUMA_geojson,
                 driver = "GeoJSON")
 
 
+# modeling ----------------------------------------------------------------
+
+attributes_df <- na.omit(essential_worker)
+plot(density(attributes_df$ridership_change))
+
+lm_model <- lm(ridership_change ~ Mean_essential + I(log(mean_income)) + Borough,
+               data = attributes_df)
+summary(lm_model)
+plot(lm_model$residuals)
+plot(lm_model$fitted.values, lm_model$residuals)
+plot(density(lm_model$residuals))
+shapiro.test(lm_model$residuals)
+qqnorm(lm_model$residuals)
+qqline(lm_model$residuals)
+
+plot(attributes_df$ridership_change, lm_model$fitted.values)
+abline(a= 0, b = 1)
+broom::tidy(lm_model)
+# controlling for income and borough, 100% essential status would result in a +0.429%
+  # increase in ridership. Or 1% essential status results in 0.4% increase
+# controlling for essential status and borough, every 10% increase income results in
+  # -0.0808 * log(1.1) = -0.8% decline in ridership
+scales::percent_format(accuracy = 0.001)(-0.0808 * log(1.1))
+
+# table for blog post
+broom::tidy(lm_model) %>%
+  mutate(term = c('Intercept', 'Essential worker status', 'Household income (log)', 'Brooklyn', 'Manhattan', 'Queens')) %>% 
+  select(-statistic) %>% 
+  kableExtra::kable(digits = 2) %>% 
+  kableExtra::kable_styling(bootstrap_options = c("hover", "responsive"))
