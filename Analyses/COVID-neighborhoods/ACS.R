@@ -81,7 +81,10 @@ psam_h36 %>%
        caption = 'American Community Survey 2018 5-Year estimates\n',
        x = NULL,
        y = NULL) +
-  theme(legend.position = 'bottom')
+  theme(axis.title = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_blank(),
+        legend.position = 'bottom')
 # ggsave(filename = "Analyses/COVID-neighborhoods/Plots/income.svg",
 #        device = 'svg',
 #        height = 10,
@@ -431,7 +434,7 @@ income_range %>%
   scale_color_discrete(name = element_blank()) +
   guides(color = guide_legend(override.aes = list(linetype = 0))) +
   labs(title = "Income vs. decline in subway ridership",
-       subtitle = 'Data aggregated on the Public Use Microdata Area (PUMA) level\nRange represents 95% confidence interval of household income',
+       subtitle = 'Data aggregated on the Public Use Microdata Area (PUMA) level',
        caption = 'Jan 1-Mar 4 compared to Apr 6-Jun 14\nData: MTA turnstiles, American Community Survey',
        x = "Mean household income",
        y = "Ridership change")
@@ -452,7 +455,7 @@ income_range %>%
   facet_wrap(~Borough) + 
   guides(color = guide_legend(override.aes = list(linetype = 0))) +
   labs(title = "Income vs. decline in subway ridership",
-       subtitle = 'Data aggregated on the Public Use Microdata Area (PUMA) level\nRange represents 95% confidence interval of household income',
+       subtitle = 'Data aggregated on the Public Use Microdata Area (PUMA) level',
        caption = 'Jan 1-Mar 4 compared to Apr 6-Jun 14\nData: MTA turnstiles, American Community Survey',
        x = "Mean household income",
        y = "Ridership change") +
@@ -511,3 +514,29 @@ essential_worker %>%
 #        device = 'svg',
 #        height = 7,
 #        width = 6)
+
+
+# write out geoJSON for Mapbox --------------------------------------------
+
+nyc_PUMA_geojson <- httr::GET('https://data.cityofnewyork.us/api/geospatial/cwiz-gcty?method=export&format=GeoJSON')
+nyc_PUMA_geojson <- rgdal::readOGR(httr::content(nyc_PUMA_geojson, 'text'), 'OGRGeoJSON', verbose = FALSE)
+
+tmp <- nyc_PUMA_geojson@data
+
+# merge data with geojson data
+nyc_PUMA_geojson@data <- essential_worker %>% 
+  mutate(PUMA = str_sub(PUMA, 2, 5)) %>% 
+  mutate_all(as.character) %>% 
+  left_join(mutate_all(nyc_PUMA_geojson@data, as.character),
+            y = ., by = c("puma" = "PUMA")) %>% 
+  # mutate_all(as.character) %>% 
+  mutate_all(as.numeric) %>% 
+  as.data.frame() 
+
+# write out dataframe to use with Mapbox
+rgdal::writeOGR(obj = nyc_PUMA_geojson,
+                layer = "nyc_PUMA_geojson",
+                dsn = "Analyses/COVID-neighborhoods/Data/nyc_PUMA.GeoJSON",
+                driver = "GeoJSON")
+
+
