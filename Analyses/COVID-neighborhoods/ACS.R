@@ -433,7 +433,7 @@ income_range %>%
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   scale_color_discrete(name = element_blank()) +
   guides(color = guide_legend(override.aes = list(linetype = 0))) +
-  labs(title = "Income vs. decline in subway ridership",
+  labs(title = "Income vs. subway ridership",
        subtitle = 'Data aggregated on the Public Use Microdata Area (PUMA) level',
        caption = 'Jan 1-Mar 4 compared to Apr 6-Jun 14\nData: MTA turnstiles, American Community Survey',
        x = "Mean household income",
@@ -454,7 +454,7 @@ income_range %>%
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   facet_wrap(~Borough) + 
   guides(color = guide_legend(override.aes = list(linetype = 0))) +
-  labs(title = "Income vs. decline in subway ridership",
+  labs(title = "Income vs. subway ridership",
        subtitle = 'Data aggregated on the Public Use Microdata Area (PUMA) level',
        caption = 'Jan 1-Mar 4 compared to Apr 6-Jun 14\nData: MTA turnstiles, American Community Survey',
        x = "Mean household income",
@@ -486,7 +486,7 @@ essential_worker %>%
   geom_line(stat = "smooth", method = 'lm', alpha = 0.3, size = 1) +
   scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  labs(title = "Essential worker status vs. decline in subway ridership",
+  labs(title = "Essential worker status vs. subway ridership",
        subtitle = 'Data aggregated on the Public Use Microdata Area (PUMA) level',
        caption = 'Jan 1-Mar 4 compared to Apr 6-Jun 14\nData: MTA turnstiles, American Community Survey, Delaware essential industry list',
        x = "% of workers deemed essential",
@@ -504,7 +504,7 @@ essential_worker %>%
   scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   facet_wrap(~Borough) +
-  labs(title = "Essential worker status vs. decline in subway ridership",
+  labs(title = "Essential worker status vs. subway ridership",
        subtitle = 'Data aggregated on the Public Use Microdata Area (PUMA) level',
        caption = 'Jan 1-Mar 4 compared to Apr 6-Jun 14\nData: MTA turnstiles, American Community Survey, Delaware essential industry list',
        x = "% of workers deemed essential",
