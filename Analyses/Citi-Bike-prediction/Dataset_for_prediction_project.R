@@ -18,6 +18,64 @@ master_df <- dbListTables(conn) %>%
       collect()
   })
 
+
+# station level data ------------------------------------------------------
+
+# trip count by station, day
+station_usage <- master_df %>% 
+  mutate(Date = as.Date(as_datetime(Starttime)),
+         Hour = hour(as_datetime(Starttime))) %>% 
+  group_by(Start.station.id, Date) %>% 
+  summarize(Trip_count = n(),
+            .groups = 'drop') %>% 
+  rename(Station = Start.station.id)
+
+## get lat long by station
+# first get unique stations
+stations <- master_df %>% 
+  distinct(Start.station.id, Start.station.latitude, Start.station.longitude) %>% 
+  group_by(Start.station.id) %>% 
+  filter(row_number() == 1) %>% 
+  ungroup()
+
+# second get subway stations
+subway_stations <- tbl(conn, "station.lat.long") %>% collect()
+
+# third, get distance between closest subway station for each citibike station
+# km between two lat long points
+# lat 1 degree = 110.574 km
+# long 1 degree = 111.320*cos(latitude) km
+# https://stackoverflow.com/questions/1253499/simple-calculations-for-working-with-lat-lon-and-km-distance
+stations$dist_to_subway <-
+  map2_dbl(.x = stations$Start.station.latitude,
+           .y = stations$Start.station.longitude,
+           .f = function(lat1, long1) {
+      lat_dist <- subway_stations$Lat - lat1
+      long_dist <- subway_stations$Long - long1
+      long_dist <- long_dist * cos((lat1 * pi) / (180))
+      dist <- sqrt(lat_dist ^ 2 + long_dist ^ 2)
+      dist <- dist[dist != 0]
+      min(dist)
+    }
+  )
+
+# add distance to station_usage
+station_usage <- station_usage %>% 
+  left_join(stations %>% select(Station = Start.station.id, dist_to_subway))
+
+# remove service stations
+# all stations with dist >1 have been manually checked
+  # as service stations
+station_usage <- station_usage %>% 
+  filter(dist_to_subway < 1)
+
+# write out the dataset
+write_csv(station_usage, 'Analyses/Citi-Bike-prediction/Citi-Bike-prediction/Data/station_day_trips.csv')
+rm(station_usage)
+
+
+# trip level data ---------------------------------------------------------
+
 # sample the dataset for performance
 master_df <- slice_sample(master_df, n = 5000000)
 
@@ -74,4 +132,4 @@ master_df <- master_df %>%
 dim(master_df)
 
 # write out the dataset
-write_csv(master_df, 'Analyses/Citi-Bike-prediction/Citi-Bike-prediction/Citi_Bike_trips/Data.csv')
+write_csv(master_df, 'Analyses/Citi-Bike-prediction/Citi-Bike-prediction/Citi_Bike_trips/trips.csv')
